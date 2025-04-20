@@ -19,6 +19,7 @@ with open('config.yaml', 'r') as file:
     config = yaml.safe_load(file)
 
 data_dir = config['data_dir']
+root_dataset_dir = config['root_dataset_dir']
 batch_size = config['batch_size']
 num_workers = config['num_workers']
 model_names = config['model_names']
@@ -48,9 +49,9 @@ val_annotation = os.path.join(data_dir, 'val_annotation.txt')
 test_annotation = os.path.join(data_dir, 'test_annotation.txt')
 
 # Load datasets
-train_dataset = AnnotationDataset(train_annotation, data_dir, transform)
-val_dataset = AnnotationDataset(val_annotation, data_dir, transform)
-test_dataset = AnnotationDataset(test_annotation, data_dir, transform)
+train_dataset = AnnotationDataset(train_annotation, root_dataset_dir, transform)
+val_dataset = AnnotationDataset(val_annotation, root_dataset_dir, transform)
+test_dataset = AnnotationDataset(test_annotation, root_dataset_dir, transform)
 
 # Wrap into DataLoaders
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
