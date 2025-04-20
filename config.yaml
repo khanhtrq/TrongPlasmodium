@@ -1,5 +1,6 @@
 # Dataset configuration
-data_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
+data_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/'
+root_dataset_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
 batch_size: 32
 num_workers: 4
 
