@@ -196,7 +196,6 @@ class AsymmetricFocalTverskyLoss(nn.Module):
     def forward(self, y_pred, y_true):
         # Clip values to prevent division by zero error
         y_pred = torch.clamp(y_pred, self.epsilon, 1. - self.epsilon)
-	    print( y_pred.size(), y_true.size())
         axis = identify_axis(y_true.size())
 
         # Calculate true positives (tp), false negatives (fn) and false positives (fp)     
