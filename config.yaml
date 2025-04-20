@@ -1,0 +1,23 @@
+# Dataset configuration
+data_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
+batch_size: 32
+num_workers: 4
+
+# Model training configuration
+model_names:
+  - resnet
+  - densenet
+  - mobilenet_v2
+  - mobilenet_v3
+num_epochs: 100
+patience: 20
+learning_rate: 0.001
+step_size: 5
+gamma: 0.5
+use_amp: true
+
+# Results directory
+results_dir: 'results'
+
+# Device configuration
+tpu_available: false
