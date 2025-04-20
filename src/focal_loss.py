@@ -60,13 +60,13 @@ def compute_class_weights(dataloader, num_classes, device):
 
 def identify_axis(shape):
     # Three dimensional
-    if len(shape) == 5 : return [2,3,4]
-
+    if len(shape) == 5: return [2, 3, 4]
     # Two dimensional
-    elif len(shape) == 4 : return [2,3]
-    
+    elif len(shape) == 4: return [2, 3]
+    # Classification tensors (batch, classes)
+    elif len(shape) == 2: return [1]
     # Exception - Unknown
-    else : raise ValueError('Metric: Shape of tensor is neither 2D or 3D.')
+    else: raise ValueError(f'Metric: Shape of tensor {shape} is neither 2D, 3D, nor classification (1D).')
 
 
 class SymmetricFocalLoss(nn.Module):
