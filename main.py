@@ -6,13 +6,13 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from sklearn.metrics import classification_report
 
-from data_loader import AnnotationDataset
-from device_handler import get_device
-from model_initializer import initialize_model
-from training import train_model
-from evaluation import infer_from_annotation, report_classification
-from gradcam import generate_and_save_gradcam_per_class
-from focal_loss import FocalLoss
+from src.data_loader import AnnotationDataset
+from src.device_handler import get_device
+from src.model_initializer import initialize_model
+from src.training import train_model
+from src.evaluation import infer_from_annotation, report_classification
+from src.gradcam import generate_and_save_gradcam_per_class
+from src.focal_loss import FocalLoss
 
 # Load configuration
 with open('config.yaml', 'r') as file:
