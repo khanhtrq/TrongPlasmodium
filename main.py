@@ -16,7 +16,7 @@ from src.loss import F1Loss, FocalLoss
 import matplotlib.pyplot as plt
 import matplotlib
 
-from src.visualization import plot_training_curves
+from src.visualization import plot_sample_images_per_class, plot_training_curves
 
 # Load configuration
 with open('config.yaml', 'r') as file:
@@ -61,6 +61,8 @@ test_dataset = AnnotationDataset(test_annotation, root_dataset_dir, transform)
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+plot_sample_images_per_class(train_dataset, num_samples=5)
 
 dataloaders = {
     'train': train_loader,

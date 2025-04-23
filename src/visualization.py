@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torchvision
+import random
+import torch
 
 def imshow(inp, title=None):
     """Hiển thị ảnh từ tensor trong notebook.
@@ -68,49 +70,68 @@ def analyze_class_distribution_across_splits(train_dataset, val_dataset, test_da
         
         print(f"- {class_name}: {train_ratio:.2f}% Train, {val_ratio:.2f}% Validation, {test_ratio:.2f}% Test")
 
-import random
-import matplotlib.pyplot as plt
-import numpy as np
+def imshow_helper(inp, title=None):
+    """Helper to display image tensor."""
+    inp = inp.numpy().transpose((1, 2, 0))
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+    inp = std * inp + mean
+    inp = np.clip(inp, 0, 1)
 
-def imshow(ax, image, title=None):
-    npimg = image.numpy().transpose((1, 2, 0))
-    ax.imshow(npimg)
-    ax.axis('off')
-    if title:
-        ax.set_title(title, fontsize=8)
+    plt.imshow(inp)
+    if title is not None:
+        plt.title(title)
+    plt.axis('off')
 
-num_samples = 5
-class_names = train_dataset.classes
-samples_per_class = {class_name: [] for class_name in class_names}
+def plot_sample_images_per_class(dataset, num_samples=5):
+    """Plots a grid of sample images for each class in the dataset."""
+    class_names = dataset.classes
+    samples_per_class = {class_name: [] for class_name in class_names}
+    img_paths_labels = dataset.imgs
 
-for img_path, label in train_dataset.imgs:
-    class_name = class_names[label]
-    if len(samples_per_class[class_name]) < num_samples:
-        image = train_dataset.loader(img_path)
-        if train_dataset.transform is not None:
-            image = train_dataset.transform(image)
-        samples_per_class[class_name].append(image)
-    if all(len(samples) >= num_samples for samples in samples_per_class.values()):
-        break
+    for img_path, label in img_paths_labels:
+        class_name = class_names[label]
+        if len(samples_per_class[class_name]) < num_samples:
+            try:
+                image = dataset.loader(img_path)
+                if dataset.transform is not None:
+                    image = dataset.transform(image)
+                samples_per_class[class_name].append(image)
+            except Exception as e:
+                print(f"Could not load/transform image {img_path}: {e}")
+                continue
 
-num_classes = len(class_names)
-fig, axes = plt.subplots(num_classes, num_samples, figsize=(num_samples*2, num_classes*2))
+        if all(len(samples) >= num_samples for samples in samples_per_class.values()):
+            break
 
-if num_classes == 1:
-    axes = np.expand_dims(axes, 0)
-if num_samples == 1:
-    axes = np.expand_dims(axes, 1)
+    num_classes = len(class_names)
+    if num_classes == 0:
+        print("No classes found in the dataset.")
+        return
 
-for i, class_name in enumerate(class_names):
-    for j in range(num_samples):
-        ax = axes[i, j]
-        if j < len(samples_per_class[class_name]):
-            imshow(ax, samples_per_class[class_name][j])
-        else:
-            ax.axis('off')
+    fig_width = num_samples * 2
+    fig_height = num_classes * 2
+    fig, axes = plt.subplots(num_classes, num_samples, figsize=(fig_width, fig_height), squeeze=False)
 
-import matplotlib.pyplot as plt
-import numpy as np
+    for i, class_name in enumerate(class_names):
+        axes[i, 0].set_ylabel(class_name, rotation=90, size='large')
+        for j in range(num_samples):
+            ax = axes[i, j]
+            if j < len(samples_per_class[class_name]):
+                img_tensor = samples_per_class[class_name][j]
+                if isinstance(img_tensor, torch.Tensor):
+                    img_tensor = img_tensor.detach() if img_tensor.requires_grad else img_tensor
+                    img_tensor = img_tensor.cpu()
+                    plt.sca(ax)
+                    imshow_helper(img_tensor)
+                else:
+                    ax.imshow(img_tensor)
+                    ax.axis('off')
+            else:
+                ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
 
 def smooth_curve(points, factor=0.6):
     smoothed_points = []
