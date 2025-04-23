@@ -16,7 +16,7 @@ from src.loss import F1Loss, FocalLoss
 import matplotlib.pyplot as plt
 import matplotlib
 
-from visualization import plot_training_curves
+from src.visualization import plot_training_curves
 
 # Load configuration
 with open('config.yaml', 'r') as file:
