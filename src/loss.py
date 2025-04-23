@@ -55,3 +55,30 @@ def compute_class_weights(dataloader, num_classes, device):
     total = counts.sum()
     weights = total / (counts + 1e-6)
     return weights.to(device)
+
+
+class F1Loss(nn.Module):
+    def __init__(self, num_classes, beta=1.0, reduction='mean'):
+        super(F1Loss, self).__init__()
+        self.num_classes = num_classes
+        self.beta = beta
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        inputs = F.softmax(inputs, dim=1)
+        preds = torch.argmax(inputs, dim=1)
+
+        tp = (preds * targets).sum().to(torch.float32)
+        fp = ((1 - targets) * preds).sum().to(torch.float32)
+        fn = (targets * (1 - preds)).sum().to(torch.float32)
+
+        precision = tp / (tp + fp + 1e-6)
+        recall = tp / (tp + fn + 1e-6)
+
+        f1_score = (1 + self.beta ** 2) * (precision * recall) / (self.beta ** 2 * precision + recall + 1e-6)
+
+        if self.reduction == 'mean':
+            return 1 - f1_score.mean()
+        elif self.reduction == 'sum':
+            return 1 - f1_score.sum()
+        return 1 - f1_score

@@ -12,7 +12,11 @@ from src.model_initializer import initialize_model
 from src.training import train_model
 from src.evaluation import infer_from_annotation, report_classification
 from src.gradcam import generate_and_save_gradcam_per_class
-from src.focal_loss import FocalLoss, SymmetricUnifiedFocalLoss
+from loss import F1Loss, FocalLoss, SymmetricUnifiedFocalLoss
+import matplotlib.pyplot as plt
+import matplotlib
+
+from visualization import plot_training_curves
 
 # Load configuration
 with open('config.yaml', 'r') as file:
@@ -74,7 +78,7 @@ for model_name in model_names:
     model = model.to(device)
     
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = SymmetricUnifiedFocalLoss()
+    criterion = F1Loss(num_classes=len(train_dataset.classes), beta=1.0, reduction='mean')
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     
     model_save_path = os.path.join(model_dir, 'best_model.pth')
