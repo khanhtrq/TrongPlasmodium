@@ -3,6 +3,7 @@ import time
 from tqdm import tqdm
 import torch
 from sklearn.metrics import precision_recall_fscore_support
+import pandas as pd  # Add pandas import
 
 try:
     import torch_xla.core.xla_model as xm
@@ -11,7 +12,8 @@ except ImportError:
     _tpu_available = False
 
 def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
-                num_epochs=25, patience=5, use_amp=True, save_path='best_model.pth'):
+                num_epochs=25, patience=5, use_amp=True, save_path='best_model.pth',
+                log_path='training_log.csv'):  # Add log_path parameter
     
     since = time.time()
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -112,6 +114,21 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
     time_elapsed = time.time() - since
     print(f'\nTraining complete in {time_elapsed//60:.0f}m {time_elapsed%60:.0f}s')
     print(f'Best val Acc: {best_acc:.4f}')
+
+    # Convert history to DataFrame and save as CSV
+    try:
+        # Ensure all lists in history have the same length (pad if early stopping)
+        max_len = max(len(v) for v in history.values())
+        for k, v in history.items():
+            if len(v) < max_len:
+                # Pad with NaN or the last value, NaN is generally better for missing data
+                history[k].extend([float('nan')] * (max_len - len(v)))
+
+        history_df = pd.DataFrame(history)
+        history_df.to_csv(log_path, index=False)
+        print(f"💾 Training log saved to {log_path}")
+    except Exception as e:
+        print(f"⚠️ Could not save training log to {log_path}: {e}")
 
     model.load_state_dict(best_model_wts)
     return model, history
