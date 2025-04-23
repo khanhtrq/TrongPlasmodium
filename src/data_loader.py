@@ -10,6 +10,7 @@ class AnnotationDataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
         self.labels = set()
+        self.targets = [] # Add list to store targets
 
         with open(annotation_file, 'r') as f:
             for line in f:
@@ -18,6 +19,7 @@ class AnnotationDataset(Dataset):
                 label = int(label)
                 self.samples.append((full_path, label))
                 self.labels.add(label)
+                self.targets.append(label) # Store the label
 
         self.classes = [str(i) for i in sorted(self.labels)]
         self.imgs = self.samples
