@@ -49,11 +49,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                 optimizer.zero_grad()
 
                 with torch.set_grad_enabled(phase == 'train'):
-                    if is_cuda and use_amp:
-                        with torch.cuda.amp.autocast():
-                            outputs = model(inputs)
-                            loss = criterion(outputs, labels)
-                    else:
+                    with torch.amp.autocast(device_type=device.type, dtype=torch.float16 if is_cuda else torch.bfloat16, enabled=use_amp):
                         outputs = model(inputs)
                         loss = criterion(outputs, labels)
 
@@ -66,7 +62,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                             scaler.scale(loss).backward()
                             scaler.step(optimizer)
                             scaler.update()
-                        else:
+                        elif not (is_cuda and use_amp):
                             loss.backward()
                             optimizer.step()
 

@@ -58,27 +58,45 @@ def compute_class_weights(dataloader, num_classes, device):
 
 
 class F1Loss(nn.Module):
-    def __init__(self, num_classes, beta=1.0, reduction='mean'):
+    '''
+    Computes the F1 loss, a differentiable approximation of the F1 score.
+    Assumes inputs are raw logits and targets are class indices.
+    '''
+    def __init__(self, num_classes, epsilon=1e-7, beta=1.0, reduction='mean'):
         super(F1Loss, self).__init__()
         self.num_classes = num_classes
+        self.epsilon = epsilon
         self.beta = beta
         self.reduction = reduction
 
     def forward(self, inputs, targets):
-        inputs = F.softmax(inputs, dim=1)
-        preds = torch.argmax(inputs, dim=1)
+        # inputs: (batch_size, num_classes) - Raw logits from the model
+        # targets: (batch_size) - Long tensor of class indices
 
-        tp = (preds * targets).sum().to(torch.float32)
-        fp = ((1 - targets) * preds).sum().to(torch.float32)
-        fn = (targets * (1 - preds)).sum().to(torch.float32)
+        # Apply softmax to get probabilities
+        probas = F.softmax(inputs, dim=1)
 
-        precision = tp / (tp + fp + 1e-6)
-        recall = tp / (tp + fn + 1e-6)
+        # Convert targets to one-hot encoding
+        targets_one_hot = F.one_hot(targets, num_classes=self.num_classes).to(dtype=inputs.dtype)
+        # targets_one_hot: (batch_size, num_classes)
 
-        f1_score = (1 + self.beta ** 2) * (precision * recall) / (self.beta ** 2 * precision + recall + 1e-6)
+        # Calculate true positives, false positives, false negatives per class
+        # These are sums over the batch dimension
+        tp = (probas * targets_one_hot).sum(dim=0)
+        fp = (probas * (1 - targets_one_hot)).sum(dim=0)
+        fn = ((1 - probas) * targets_one_hot).sum(dim=0)
 
-        if self.reduction == 'mean':
-            return 1 - f1_score.mean()
-        elif self.reduction == 'sum':
-            return 1 - f1_score.sum()
-        return 1 - f1_score
+        # Calculate precision and recall per class
+        precision = tp / (tp + fp + self.epsilon)
+        recall = tp / (tp + fn + self.epsilon)
+
+        # Calculate F1 score per class
+        f1 = (1 + self.beta**2) * (precision * recall) / ((self.beta**2 * precision) + recall + self.epsilon)
+
+        # Average F1 score across classes (macro F1)
+        # The loss is 1 - F1 score
+        f1_loss = 1 - f1.mean() # Macro F1 loss
+
+        # Note: Reduction parameter isn't explicitly used here as we default to macro average loss.
+        # You could adapt this part if 'sum' or element-wise loss is needed.
+        return f1_loss
