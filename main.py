@@ -12,7 +12,7 @@ from src.model_initializer import initialize_model
 from src.training import train_model
 from src.evaluation import infer_from_annotation, report_classification
 from src.gradcam import generate_and_save_gradcam_per_class
-from loss import F1Loss, FocalLoss, SymmetricUnifiedFocalLoss
+from src.loss import F1Loss, FocalLoss
 import matplotlib.pyplot as plt
 import matplotlib
 
