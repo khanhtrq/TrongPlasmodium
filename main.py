@@ -15,6 +15,7 @@ from src.model_initializer import initialize_model
 from src.training import train_model
 from src.evaluation import infer_from_annotation, report_classification
 from src.gradcam import generate_and_save_gradcam_per_class
+from src.loss import FocalLoss
 import matplotlib.pyplot as plt
 import matplotlib
 
@@ -91,7 +92,7 @@ for model_name in model_names:
     model = model.to(device)
     
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.CrossEntropyLoss()
+    criterion = FocalLoss(gamma=5.0, alpha=1).to(device)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     
     model_save_path = os.path.join(model_dir, 'best_model.pth')
@@ -106,11 +107,8 @@ for model_name in model_names:
     plot_file_path = os.path.join(model_dir, 'training_curves.png')
     if history and all(k in history for k in ['train_loss', 'val_loss', 'train_acc_macro', 'val_acc_macro']):
         try:
-            plt.figure()
-            plot_training_curves(history, title_suffix=f"({model_name})")
-            plt.savefig(plot_file_path)
-            plt.close()
-            print(f"📈 Training curves saved to {plot_file_path}")
+            # Use the save_path parameter directly in the function call
+            plot_training_curves(history, title_suffix=f"({model_name})", save_path=plot_file_path)
         except Exception as e:
             print(f"⚠️ Could not plot/save training curves for {model_name}: {e}")
     else:

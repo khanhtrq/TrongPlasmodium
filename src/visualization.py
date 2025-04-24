@@ -144,7 +144,7 @@ def smooth_curve(points, factor=0.6):
             smoothed_points.append(point)
     return smoothed_points
 
-def plot_training_curves(history, title_suffix=''):
+def plot_training_curves(history, title_suffix='', save_path=None):
     plt.figure(figsize=(18, 5))
 
     plt.subplot(1, 3, 1)
@@ -178,4 +178,11 @@ def plot_training_curves(history, title_suffix=''):
     plt.grid(True, linestyle='--', alpha=0.6)
 
     plt.tight_layout()
-    plt.show()
+    
+    # Save the figure if a path is provided, otherwise display it
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        print(f"📈 Training curves saved to {save_path}")
+        plt.close()
+    else:
+        plt.show()
