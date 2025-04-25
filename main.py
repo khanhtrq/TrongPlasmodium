@@ -61,11 +61,12 @@ val_dataset = AnnotationDataset(val_annotation, root_dataset_dir, transform)
 test_dataset = AnnotationDataset(test_annotation, root_dataset_dir, transform)
 
 # --- Weighted Sampling Setup ---
+sampler = None
 print("⚖️ Calculating sample weights for balanced training...")
 train_labels = np.array(train_dataset.targets)
 sample_weights = compute_sample_weight(class_weight='balanced', y=train_labels)
 sampler_weights = torch.DoubleTensor(sample_weights)
-sampler = WeightedRandomSampler(weights=sampler_weights, num_samples=len(sampler_weights), replacement=True)
+# sampler = WeightedRandomSampler(weights=sampler_weights, num_samples=len(sampler_weights), replacement=True)
 print("✅ Sampler created.")
 # --- End Weighted Sampling Setup ---
 
