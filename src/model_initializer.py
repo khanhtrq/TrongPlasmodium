@@ -5,6 +5,7 @@ from torchvision import models
 import timm  # Add timm import
 
 import src.focalnet as focalnet  # Keep this for compatibility with existing code
+# import focalnet as focalnet  # Keep this for compatibility with existing code
 
 def set_parameter_requires_grad(model, feature_extracting):
     if feature_extracting:
@@ -138,6 +139,29 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
             print("Make sure timm is installed: pip install timm")
             exit()
 
+    elif model_name.startswith("mobilenetv4"):
+        try:
+            # Ví dụ: model_name = "mobilenetv4_hybrid_large.ix_e600_r384_in1k"
+            model_ft = timm.create_model(
+                model_name,
+                pretrained=use_pretrained,
+                num_classes=num_classes
+            )
+            set_parameter_requires_grad(model_ft, feature_extract)
+            try:
+                data_config = timm.data.resolve_model_data_config(model_ft)
+                input_size = data_config.get('input_size', (3, 224, 224))[-1]
+            except Exception:
+                input_size = 224
+        except Exception as e:
+            print(f"❌ Error loading MobileNetV4 model {model_name}: {e}")
+            print("Make sure timm is installed: pip install timm")
+            print("Available MobileNetV4 models in timm:")
+            mobilenetv4_models = [m for m in timm.list_models() if "mobilenetv4" in m]
+            for m in mobilenetv4_models:
+                print(f"  - {m}")
+            exit()
+
     else:
         print("Invalid model name, exiting...")
         exit()
@@ -147,12 +171,14 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
 
 if __name__ == "__main__":
     
-    model_name = "ese_vovnet57b"  # Example model name
+    model_name = "mobilenetv4_hybrid_large.ix_e600_r384_in1k"  # Example model name
     num_classes = 5  # Số lớp ví dụ
     feature_extract = False
     use_pretrained = True
 
     model, input_size = initialize_model(model_name, num_classes, feature_extract, use_pretrained)
     print(f"Loaded model: {model_name} with input size {input_size}")
+
+    
 
 

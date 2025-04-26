@@ -15,7 +15,7 @@ class_names:
 
 # Model training configuration
 model_names:
-  - ese_vovnet57b
+  - mobilenetv4_hybrid_large.ix_e600_r384_in1k
 num_epochs: 100
 patience: 20
 learning_rate: 0.001  # Reduced from 0.001 to 0.0001 for stability
