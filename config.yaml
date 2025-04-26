@@ -4,6 +4,15 @@ root_dataset_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_T
 batch_size: 32
 num_workers: 4
 
+# Class configuration
+class_names:
+  - "Ring"
+  - "Trophozoite"
+  - "Schizont" 
+  - "Gemtocyte"
+  - "Healthy RBC"
+  - "Other"
+
 # Model training configuration
 model_names:
   - focalnet_base_lrf

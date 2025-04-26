@@ -39,6 +39,13 @@ if __name__ == "__main__":
     use_amp = config['use_amp']
     results_dir = config['results_dir']
     tpu_available = config['tpu_available']
+    
+    # Get class names from config
+    class_names = config.get('class_names', None)
+    if class_names:
+        print(f"📋 Using class names from config: {class_names}")
+    else:
+        print("⚠️ No class names found in config. Will use automatically generated class names.")
 
     # Device configuration
     device = get_device()
@@ -56,10 +63,14 @@ if __name__ == "__main__":
     val_annotation = os.path.join(data_dir, 'val_annotation.txt')
     test_annotation = os.path.join(data_dir, 'test_annotation.txt')
 
-    # Load datasets
-    train_dataset = AnnotationDataset(train_annotation, root_dataset_dir, transform)
-    val_dataset = AnnotationDataset(val_annotation, root_dataset_dir, transform)
-    test_dataset = AnnotationDataset(test_annotation, root_dataset_dir, transform)
+    # Load datasets with class names
+    train_dataset = AnnotationDataset(train_annotation, root_dataset_dir, transform, class_names)
+    val_dataset = AnnotationDataset(val_annotation, root_dataset_dir, transform, class_names)
+    test_dataset = AnnotationDataset(test_annotation, root_dataset_dir, transform, class_names)
+    
+    # Verify class names
+    print(f"🏷️ Class names: {train_dataset.classes}")
+    print(f"🔢 Number of classes: {len(train_dataset.classes)}")
 
     # --- Weighted Sampling Setup ---
     # sampler = None

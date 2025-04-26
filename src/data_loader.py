@@ -5,7 +5,7 @@ from torchvision import transforms
 import numpy as np
 
 class AnnotationDataset(Dataset):
-    def __init__(self, annotation_file, root_dir, transform=None):
+    def __init__(self, annotation_file, root_dir, transform=None, class_names=None):
         self.samples = []
         self.root_dir = root_dir
         self.transform = transform
@@ -21,7 +21,12 @@ class AnnotationDataset(Dataset):
                 self.labels.add(label)
                 self.targets.append(label) # Store the label
 
-        self.classes = [str(i) for i in sorted(self.labels)]
+        # Use provided class_names if available, otherwise generate numeric class names
+        if class_names is not None:
+            self.classes = class_names
+        else:
+            self.classes = [str(i) for i in sorted(self.labels)]
+            
         self.imgs = self.samples
         self.loader = lambda path: Image.open(path).convert('RGB')
 
