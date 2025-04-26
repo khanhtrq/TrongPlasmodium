@@ -6,10 +6,7 @@ num_workers: 4
 
 # Model training configuration
 model_names:
-  - resnet
-  - densenet
-  - mobilenet_v2
-  - mobilenet_v3
+  - focalnet_base_lrf
 num_epochs: 100
 patience: 20
 learning_rate: 0.001
