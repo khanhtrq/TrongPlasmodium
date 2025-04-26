@@ -7,9 +7,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-def infer_from_annotation(model, annotation_file, class_names, root_dir, device):
+def infer_from_annotation(model, annotation_file, class_names, root_dir, device, input_size=(224, 224)):
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize(input_size),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])

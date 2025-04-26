@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
     # Data transformations
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((256, 256)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
@@ -142,7 +142,7 @@ if __name__ == "__main__":
         try:
             model.load_state_dict(torch.load(model_save_path, map_location=device))
             model.eval()
-            y_true, y_pred = infer_from_annotation(model, test_annotation, train_dataset.classes, root_dataset_dir, device)
+            y_true, y_pred = infer_from_annotation(model, test_annotation, train_dataset.classes, root_dataset_dir, device, input_size=(input_size, input_size))
         except Exception as e:
             print(f"Error during inference setup or execution for {model_name}: {e}")
             continue

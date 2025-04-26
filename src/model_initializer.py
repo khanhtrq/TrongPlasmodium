@@ -4,7 +4,7 @@ import torch.optim as optim
 from torchvision import models
 import timm  # Add timm import
 
-import src.focalnet as focalnet  # Keep this for compatibility with existing code
+import focalnet as focalnet  # Keep this for compatibility with existing code
 
 def set_parameter_requires_grad(model, feature_extracting):
     if feature_extracting:
@@ -96,6 +96,48 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
                 print(f"  - {m}")
             exit()
 
+    elif model_name.startswith("lsnet"):
+        try:
+            # Map model_name to the correct lsnet repo string
+            # Example: model_name = "lsnet_t" -> "hf_hub:jameslahm/lsnet_t"
+            lsnet_variants = [
+                "t", "t_distill", "s", "s_distill", "b", "b_distill"
+            ]
+            suffix = model_name.replace("lsnet_", "")
+            if suffix not in lsnet_variants:
+                raise ValueError(f"Unknown lsnet variant: {suffix}")
+            lsnet_model_name = f"hf_hub:jameslahm/lsnet_{suffix}"
+            print(lsnet_model_name)
+            model_ft = timm.create_model(
+                lsnet_model_name,
+                pretrained=use_pretrained,
+                num_classes=num_classes
+            )
+            set_parameter_requires_grad(model_ft, feature_extract)
+            input_size = 224  # Standard input size for lsnet
+        except Exception as e:
+            print(f"❌ Error loading LSNet model {model_name}: {e}")
+            print("Make sure timm is installed: pip install timm")
+            print("Available LSNet variants: t, t_distill, s, s_distill, b, b_distill")
+            lsnet_models = [m for m in timm.list_models() if "lsnet" in m]
+            for m in lsnet_models:
+                print(f"  - {m}")
+            exit()
+
+    elif model_name == "ese_vovnet57b":
+        try:
+            model_ft = timm.create_model(
+                'ese_vovnet57b.ra4_e3600_r256_in1k',
+                pretrained=use_pretrained,
+                num_classes=num_classes
+            )
+            set_parameter_requires_grad(model_ft, feature_extract)
+            input_size = 256  # As per model's default config
+        except Exception as e:
+            print(f"❌ Error loading ese_vovnet57b: {e}")
+            print("Make sure timm is installed: pip install timm")
+            exit()
+
     else:
         print("Invalid model name, exiting...")
         exit()
@@ -104,12 +146,13 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
     return model_ft, input_size
 
 if __name__ == "__main__":
-    # Test load focalnet_base_lrf
-    model_name = "focalnet_base_lrf"
+    
+    model_name = "ese_vovnet57b"  # Example model name
     num_classes = 5  # Số lớp ví dụ
     feature_extract = False
     use_pretrained = True
 
     model, input_size = initialize_model(model_name, num_classes, feature_extract, use_pretrained)
     print(f"Loaded model: {model_name} with input size {input_size}")
+
 
