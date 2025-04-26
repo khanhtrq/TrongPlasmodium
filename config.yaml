@@ -18,10 +18,11 @@ model_names:
   - focalnet_base_lrf
 num_epochs: 100
 patience: 20
-learning_rate: 0.001
+learning_rate: 0.0001  # Reduced from 0.001 to 0.0001 for stability
 step_size: 5
 gamma: 0.5
 use_amp: true
+clip_grad_norm: 1.0  # Add gradient clipping parameter
 
 # Results directory
 results_dir: 'results'

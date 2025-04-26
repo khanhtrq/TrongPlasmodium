@@ -37,6 +37,7 @@ if __name__ == "__main__":
     step_size = config['step_size']
     gamma = config['gamma']
     use_amp = config['use_amp']
+    clip_grad_norm = config.get('clip_grad_norm', 1.0)  # Add gradient clipping, default to 1.0
     results_dir = config['results_dir']
     tpu_available = config['tpu_available']
     
@@ -122,7 +123,7 @@ if __name__ == "__main__":
         model, history = train_model(
             model, dataloaders, criterion, optimizer, scheduler, device,
             num_epochs=num_epochs, patience=patience, use_amp=use_amp, save_path=model_save_path,
-            log_path=log_save_path
+            log_path=log_save_path, clip_grad_norm=clip_grad_norm  # Add clip_grad_norm parameter
         )
         
         # --- Plotting ---
