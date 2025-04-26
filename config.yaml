@@ -28,3 +28,5 @@ results_dir: 'results'
 
 # Device configuration
 tpu_available: false
+use_cuda: true      # Whether to use CUDA (GPU) for computation
+multi_gpu: true     # Whether to use DataParallel for multi-GPU training

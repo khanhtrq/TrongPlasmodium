@@ -40,16 +40,25 @@ if __name__ == "__main__":
     results_dir = config['results_dir']
     tpu_available = config['tpu_available']
     
+    # GPU configuration
+    use_cuda = config.get('use_cuda', True)  # Default to using CUDA if available
+    multi_gpu = config.get('multi_gpu', True)  # Default to using multiple GPUs if available
+    
+    # Device configuration with multi-GPU support
+    device, gpu_count = get_device(use_cuda, multi_gpu)
+    print(f"🖥️ Device: {device}")
+    if torch.cuda.is_available() and use_cuda:
+        print(f"🚀 Using {gpu_count} GPU{'s' if gpu_count > 1 else ''}")
+        if gpu_count > 0:
+            for i in range(gpu_count):
+                print(f"   GPU {i}: {torch.cuda.get_device_name(i)}")
+    
     # Get class names from config
     class_names = config.get('class_names', None)
     if class_names:
         print(f"📋 Using class names from config: {class_names}")
     else:
         print("⚠️ No class names found in config. Will use automatically generated class names.")
-
-    # Device configuration
-    device = get_device()
-    print(f"Using device: {device}")
 
     # Data transformations
     transform = transforms.Compose([
