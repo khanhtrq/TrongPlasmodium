@@ -4,9 +4,11 @@ import torch.optim as optim
 from torchvision import models
 import timm  # Add timm import
 
-# import src.focalnet as focalnet  # Keep this for compatibility with existing code
-import focalnet as focalnet  # Keep this for compatibility with existing code
 
+try:
+    import focalnet as focalnet  # Keep this for compatibility with existing code
+except ImportError:
+    import src.focalnet as focalnet  # Keep this for compatibility with existing code
 def set_parameter_requires_grad(model, feature_extracting):
     if feature_extracting:
         for param in model.parameters():
