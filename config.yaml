@@ -15,8 +15,8 @@ class_names:
 
 # Model training configuration
 model_names:
-  - mobilenetv3_small_100.lamb_in1k
-num_epochs: 20
+  - mobilenetv4_hybrid_large.e600_r384_in1k
+num_epochs: 100
 patience: 20
 learning_rate: 1e-3
 step_size: 5
