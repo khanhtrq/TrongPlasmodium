@@ -15,8 +15,8 @@ class_names:
 
 # Model training configuration
 model_names:
-  - deit3_base_patch16_224
-num_epochs: 100
+  - mobilenetv3_small_100.lamb_in1k
+num_epochs: 20
 patience: 20
 learning_rate: 1e-3
 step_size: 5
