@@ -21,7 +21,7 @@ patience: 20
 learning_rate: 1e-3
 step_size: 5
 gamma: 0.5
-use_amp: true
+use_amp: false
 clip_grad_norm: 1.0  # Add gradient clipping parameter
 
 # Results directory
