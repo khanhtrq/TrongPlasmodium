@@ -15,6 +15,8 @@ def set_parameter_requires_grad(model, feature_extracting):
 def initialize_model(model_name, num_classes, feature_extract=False, use_pretrained=True):
     model_ft = None
     input_size = 0
+    transform = None
+    model_config = {}
 
     if model_name == "resnet":
         model_ft = models.resnet50(pretrained=use_pretrained)
@@ -74,91 +76,50 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
         model_ft.classifier[3] = nn.Linear(num_ftrs, num_classes)
         input_size = 224
 
-    elif model_name.startswith("focalnet"):
+    elif model_name.startswith("focalnet") or model_name.startswith("lsnet") or model_name == "ese_vovnet57b" or model_name.startswith("mobilenetv4"):
         try:
-            # Use timm directly to load the model
+            if model_name.startswith("lsnet_"):
+                lsnet_variants = [
+                    "t", "t_distill", "s", "s_distill", "b", "b_distill"
+                ]
+                suffix = model_name.replace("lsnet_", "")
+                if suffix not in lsnet_variants:
+                    raise ValueError(f"Unknown lsnet variant: {suffix}")
+                timm_model_name = f"hf_hub:jameslahm/lsnet_{suffix}"
+            elif model_name == "ese_vovnet57b":
+                timm_model_name = 'ese_vovnet57b.ra4_e3600_r256_in1k'
+            else:
+                timm_model_name = model_name
+                
+            print(f"Loading timm model: {timm_model_name}")
             model_ft = timm.create_model(
-                model_name,  # Model name like "focalnet_base_lrf" 
+                timm_model_name,
                 pretrained=use_pretrained,
                 num_classes=num_classes
             )
-            # Feature extraction mode if requested
+            
             set_parameter_requires_grad(model_ft, feature_extract)
             
-            # Standard input size for FocalNet models
-            input_size = 224
+            data_config = timm.data.resolve_model_data_config(model_ft)
+            transform = timm.data.create_transform(**data_config, is_training=False)
+            
+            input_size = data_config.get('input_size', (3, 224, 224))[-1]
+            
+            model_config = {
+                'input_size': input_size,
+                'crop_pct': data_config.get('crop_pct', 0.875),
+                'mean': data_config.get('mean', (0.485, 0.456, 0.406)),
+                'std': data_config.get('std', (0.229, 0.224, 0.225)),
+                'interpolation': data_config.get('interpolation', 'bicubic')
+            }
+            print(f"Model config: {model_config}")
             
         except Exception as e:
-            print(f"❌ Error loading model {model_name}: {e}")
+            print(f"❌ Error loading timm model {model_name}: {e}")
             print("Make sure timm is installed: pip install timm")
-            print("Available FocalNet models in timm:")
-            focalnet_models = [m for m in timm.list_models() if "focalnet" in m]
-            for m in focalnet_models:
-                print(f"  - {m}")
-            exit()
-
-    elif model_name.startswith("lsnet"):
-        try:
-            # Map model_name to the correct lsnet repo string
-            # Example: model_name = "lsnet_t" -> "hf_hub:jameslahm/lsnet_t"
-            lsnet_variants = [
-                "t", "t_distill", "s", "s_distill", "b", "b_distill"
-            ]
-            suffix = model_name.replace("lsnet_", "")
-            if suffix not in lsnet_variants:
-                raise ValueError(f"Unknown lsnet variant: {suffix}")
-            lsnet_model_name = f"hf_hub:jameslahm/lsnet_{suffix}"
-            print(lsnet_model_name)
-            model_ft = timm.create_model(
-                lsnet_model_name,
-                pretrained=use_pretrained,
-                num_classes=num_classes
-            )
-            set_parameter_requires_grad(model_ft, feature_extract)
-            input_size = 224  # Standard input size for lsnet
-        except Exception as e:
-            print(f"❌ Error loading LSNet model {model_name}: {e}")
-            print("Make sure timm is installed: pip install timm")
-            print("Available LSNet variants: t, t_distill, s, s_distill, b, b_distill")
-            lsnet_models = [m for m in timm.list_models() if "lsnet" in m]
-            for m in lsnet_models:
-                print(f"  - {m}")
-            exit()
-
-    elif model_name == "ese_vovnet57b":
-        try:
-            model_ft = timm.create_model(
-                'ese_vovnet57b.ra4_e3600_r256_in1k',
-                pretrained=use_pretrained,
-                num_classes=num_classes
-            )
-            set_parameter_requires_grad(model_ft, feature_extract)
-            input_size = 256  # As per model's default config
-        except Exception as e:
-            print(f"❌ Error loading ese_vovnet57b: {e}")
-            print("Make sure timm is installed: pip install timm")
-            exit()
-
-    elif model_name.startswith("mobilenetv4"):
-        try:
-            # Ví dụ: model_name = "mobilenetv4_hybrid_large.ix_e600_r384_in1k"
-            model_ft = timm.create_model(
-                model_name,
-                pretrained=use_pretrained,
-                num_classes=num_classes
-            )
-            set_parameter_requires_grad(model_ft, feature_extract)
-            try:
-                data_config = timm.data.resolve_model_data_config(model_ft)
-                input_size = data_config.get('input_size', (3, 224, 224))[-1]
-            except Exception:
-                input_size = 224
-        except Exception as e:
-            print(f"❌ Error loading MobileNetV4 model {model_name}: {e}")
-            print("Make sure timm is installed: pip install timm")
-            print("Available MobileNetV4 models in timm:")
-            mobilenetv4_models = [m for m in timm.list_models() if "mobilenetv4" in m]
-            for m in mobilenetv4_models:
+            print("Available models in timm with this prefix:")
+            matching_models = [m for m in timm.list_models() if model_name.split('_')[0] in m][:10]
+            for m in matching_models:
                 print(f"  - {m}")
             exit()
 
@@ -167,18 +128,34 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
         exit()
 
     print(model_ft)
-    return model_ft, input_size
+    return model_ft, input_size, transform, model_config
 
 if __name__ == "__main__":
     
-    model_name = "mobilenetv4_hybrid_large.ix_e600_r384_in1k"  # Example model name
+    model_name = "mobilenetv4_hybrid_large.e600_r384_in1k"  # Example model name
     num_classes = 5  # Số lớp ví dụ
     feature_extract = False
     use_pretrained = True
 
-    model, input_size = initialize_model(model_name, num_classes, feature_extract, use_pretrained)
+    model, input_size, transform, model_config = initialize_model(model_name, num_classes, feature_extract, use_pretrained)
     print(f"Loaded model: {model_name} with input size {input_size}")
-
+    print(f"Transform pipeline: {transform}")
+    print(f"Model config: {model_config}")
     
+    if transform:
+        from PIL import Image
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from urllib.request import urlopen
+        
+        print("\n=== Testing transform on image ===")
+        img = Image.open(urlopen(
+            'https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png'
+        ))
+        
+        transformed_img = transform(img)
+        print(f"Transformed shape: {transformed_img.shape}")
+
+
 
 

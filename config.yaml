@@ -15,10 +15,10 @@ class_names:
 
 # Model training configuration
 model_names:
-  - mobilenetv4_hybrid_large.ix_e600_r384_in1k
+  - mobilenetv4_hybrid_large.e600_r384_in1k
 num_epochs: 100
 patience: 20
-learning_rate: 0.001  # Reduced from 0.001 to 0.0001 for stability
+learning_rate: 1e-3
 step_size: 5
 gamma: 0.5
 use_amp: true

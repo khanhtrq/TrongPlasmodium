@@ -61,8 +61,8 @@ if __name__ == "__main__":
     else:
         print("⚠️ No class names found in config. Will use automatically generated class names.")
 
-    # Data transformations
-    transform = transforms.Compose([
+    # Data transformations - default transform sẽ được sử dụng cho các mô hình không phải timm
+    default_transform = transforms.Compose([
         transforms.Resize((384, 384)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -73,37 +73,6 @@ if __name__ == "__main__":
     val_annotation = os.path.join(data_dir, 'val_annotation.txt')
     test_annotation = os.path.join(data_dir, 'test_annotation.txt')
 
-    # Load datasets with class names
-    train_dataset = AnnotationDataset(train_annotation, root_dataset_dir, transform, class_names)
-    val_dataset = AnnotationDataset(val_annotation, root_dataset_dir, transform, class_names)
-    test_dataset = AnnotationDataset(test_annotation, root_dataset_dir, transform, class_names)
-    
-    # Verify class names
-    print(f"🏷️ Class names: {train_dataset.classes}")
-    print(f"🔢 Number of classes: {len(train_dataset.classes)}")
-
-    # --- Weighted Sampling Setup ---
-    # sampler = None
-    # print("⚖️ Calculating sample weights for balanced training...")
-    # train_labels = np.array(train_dataset.targets)
-    # sample_weights = compute_sample_weight(class_weight='balanced', y=train_labels)
-    # sampler_weights = torch.DoubleTensor(sample_weights)
-    # sampler = WeightedRandomSampler(weights=sampler_weights, num_samples=len(sampler_weights), replacement=True)
-    # print("✅ Sampler created.")
-    # --- End Weighted Sampling Setup ---
-
-    # Wrap into DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-
-    plot_sample_images_per_class(train_dataset, num_samples=5)
-
-    dataloaders = {
-        'train': train_loader,
-        'val': val_loader
-    }
-
     # Training and evaluation
     for model_name in model_names:
         print(f"\n🚀 Training model: {model_name}")
@@ -111,8 +80,38 @@ if __name__ == "__main__":
         model_dir = os.path.join(results_dir, model_name)
         os.makedirs(model_dir, exist_ok=True)
         
-        model, input_size = initialize_model(model_name, len(train_dataset.classes))
+        # Khởi tạo mô hình và lấy transform từ timm nếu có
+        model, input_size, model_transform, model_config = initialize_model(model_name, len(class_names) if class_names else None)
+        
+        # Sử dụng transform từ timm nếu có, mặc định nếu không
+        transform = model_transform if model_transform is not None else default_transform
+        print(f"Using input size: {input_size}x{input_size}")
+        print(f"Using transform pipeline from: {'timm' if model_transform else 'default config'}")
+        
+        # Dataset với transform của model
+        train_dataset = AnnotationDataset(train_annotation, root_dataset_dir, transform, class_names)
+        val_dataset = AnnotationDataset(val_annotation, root_dataset_dir, transform, class_names)
+        test_dataset = AnnotationDataset(test_annotation, root_dataset_dir, transform, class_names)
+        
+        # Verify class names
+        print(f"🏷️ Class names: {train_dataset.classes}")
+        print(f"🔢 Number of classes: {len(train_dataset.classes)}")
+        
+        # Wrap into DataLoaders
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        
+        dataloaders = {
+            'train': train_loader,
+            'val': val_loader
+        }
+        
+        # Move model to device
         model = model.to(device)
+        
+        # Visualize samples with model-specific transforms
+        plot_sample_images_per_class(train_dataset, num_samples=3)
         
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         criterion = nn.CrossEntropyLoss()

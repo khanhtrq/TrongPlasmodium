@@ -5,6 +5,8 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
+import torch.nn.functional as F
+import timm
 
 from collections import defaultdict
 
@@ -28,6 +30,43 @@ def setup_gradcam(model_name, model):
     def backward_hook(module, grad_input, grad_output):
         gradcam_data['gradients'] = grad_output[0]
 
+    # Add support for timm models
+    def find_target_layer_for_timm_model(model):
+        # For Vision Transformer based models
+        if hasattr(model, 'blocks') and len(model.blocks) > 0:
+            return model.blocks[-1].norm1  # Common for ViT, Focal Transformers, etc.
+        
+        # For CNN based models with features attribute
+        if hasattr(model, 'features') and len(model.features) > 0:
+            return model.features[-1]
+            
+        # For models with stages/blocks like ResNet variants
+        if hasattr(model, 'stages') and len(model.stages) > 0:
+            return model.stages[-1][-1]
+            
+        # For models with a body attribute (some timm models)
+        if hasattr(model, 'body') and hasattr(model.body, 'blocks') and len(model.body.blocks) > 0:
+            return model.body.blocks[-1]
+        
+        # For EfficientNet and similar architectures
+        if hasattr(model, 'conv_head'):
+            return model.conv_head
+            
+        # For MobileNetV4 and similar architectures
+        if hasattr(model, 'head') and hasattr(model.head, 'act3'):
+            return model.head.act3
+            
+        # Fallback option - try to find the last conv layer
+        last_conv = None
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Conv2d):
+                last_conv = module
+        
+        if last_conv is not None:
+            return last_conv
+            
+        raise ValueError(f"Could not find suitable target layer for GradCAM in model architecture")
+
     if model_name == "resnet":
         target_layer = model.layer4[-1].conv3
     elif model_name == "alexnet":
@@ -44,8 +83,41 @@ def setup_gradcam(model_name, model):
         target_layer = model.features[-1]
     elif model_name == "mobilenet_v3":
         target_layer = model.features[-1]
+    elif model_name.startswith("focalnet"):
+        # FocalNet models generally follow transformer architecture
+        if hasattr(model, 'layers') and len(model.layers) > 0:
+            target_layer = model.layers[-1].blocks[-1].norm1
+        else:
+            target_layer = find_target_layer_for_timm_model(model)
+    elif model_name.startswith("lsnet"):
+        # LSNet models typically have a similar structure to ViTs
+        if hasattr(model, 'blocks') and len(model.blocks) > 0:
+            target_layer = model.blocks[-1].norm1
+        else:
+            target_layer = find_target_layer_for_timm_model(model)
+    elif model_name == "ese_vovnet57b":
+        # ESE-VovNet typically has a stage structure
+        if hasattr(model, 'stages') and len(model.stages) > 0:
+            target_layer = model.stages[-1]
+        else:
+            target_layer = find_target_layer_for_timm_model(model)
+    elif model_name.startswith("mobilenetv4"):
+        # MobileNetV4 has a different structure with conv_head and norm_head
+        if hasattr(model, 'conv_head'):
+            # Use the conv_head as the target layer - this is the final conv before classification
+            target_layer = model.conv_head
+        elif hasattr(model, 'features') and len(model.features) > 0:
+            # Fallback to features if available
+            target_layer = model.features[-1]
+        else:
+            target_layer = find_target_layer_for_timm_model(model)
     else:
-        raise ValueError(f"❌ Unsupported model: {model_name}")
+        # Generic fallback for other models
+        try:
+            target_layer = find_target_layer_for_timm_model(model)
+            print(f"[⚠️] Using auto-detected target layer for GradCAM with model: {model_name}")
+        except ValueError:
+            raise ValueError(f"❌ Unsupported model: {model_name}")
 
     target_layer.register_forward_hook(forward_hook)
     target_layer.register_backward_hook(backward_hook)
@@ -121,7 +193,6 @@ def show_gradcam_on_image(image_tensor, cam, title="Grad-CAM", save_path=None):
         plt.show()
 
 import os
-import torch.nn.functional as F
 
 def generate_and_save_gradcam_per_class(model_name, model, dataset, transform, save_dir="gradcam_results"):
     os.makedirs(save_dir, exist_ok=True)
