@@ -15,7 +15,7 @@ class_names:
 
 # Model training configuration
 model_names:
-  - timm/focalnet_base_lrf.ms_in1k
+  - focalnet_base_lrf.ms_in1k
 num_epochs: 100
 patience: 20
 learning_rate: 1e-3
