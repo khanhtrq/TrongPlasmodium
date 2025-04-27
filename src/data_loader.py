@@ -21,9 +21,21 @@ class AnnotationDataset(Dataset):
                 self.labels.add(label)
                 self.targets.append(label) # Store the label
 
+        # Debug print to show unique labels
+        print(f"🧩 Unique labels in annotation file: {sorted(self.labels)}")
+
         # Use provided class_names if available, otherwise generate numeric class names
         if class_names is not None:
             self.classes = class_names
+            # Remap label indices to contiguous zero-based indices matching class_names
+            # Assume class_names are in the intended order
+            unique_labels = sorted(self.labels)
+            if unique_labels != list(range(len(class_names))):
+                print(f"⚠️ Remapping label indices to match class_names order.")
+                label_to_index = {orig: idx for idx, orig in enumerate(unique_labels)}
+                self.samples = [(img_path, label_to_index[label]) for img_path, label in self.samples]
+                self.targets = [label_to_index[label] for label in self.targets]
+                print(f"🔁 Label mapping: {label_to_index}")
         else:
             self.classes = [str(i) for i in sorted(self.labels)]
             

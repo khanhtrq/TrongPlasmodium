@@ -58,8 +58,10 @@ if __name__ == "__main__":
     class_names = config.get('class_names', None)
     if class_names:
         print(f"📋 Using class names from config: {class_names}")
+        num_classes = len(class_names)
     else:
         print("⚠️ No class names found in config. Will use automatically generated class names.")
+        num_classes = None  # Will be inferred later
 
     # Data transformations - default transform sẽ được sử dụng cho các mô hình không phải timm
     default_transform = transforms.Compose([
@@ -80,8 +82,12 @@ if __name__ == "__main__":
         model_dir = os.path.join(results_dir, model_name)
         os.makedirs(model_dir, exist_ok=True)
         
+        # --- DEBUG: Print num_classes and class_names ---
+        print(f"🔎 num_classes: {num_classes}")
+        print(f"🔎 class_names: {class_names}")
+        
         # Khởi tạo mô hình và lấy transform từ timm nếu có
-        model, input_size, model_transform, model_config = initialize_model(model_name, len(class_names) if class_names else None)
+        model, input_size, model_transform, model_config = initialize_model(model_name, num_classes)
         
         # Sử dụng transform từ timm nếu có, mặc định nếu không
         transform = model_transform if model_transform is not None else default_transform
@@ -96,6 +102,17 @@ if __name__ == "__main__":
         # Verify class names
         print(f"🏷️ Class names: {train_dataset.classes}")
         print(f"🔢 Number of classes: {len(train_dataset.classes)}")
+        # Add debug: show unique labels in train set
+        print(f"🧩 Unique labels in train set after mapping: {sorted(set(train_dataset.targets))}")
+        
+        # --- DEBUG: Check for label range issues in train_dataset ---
+        label_set = set(train_dataset.targets)
+        if num_classes is not None:
+            out_of_range = [lbl for lbl in label_set if lbl < 0 or lbl >= num_classes]
+            if out_of_range:
+                print(f"⚠️ WARNING: Found labels out of range [0, {num_classes-1}]: {out_of_range}")
+            else:
+                print(f"✅ All labels in train set are within [0, {num_classes-1}]")
         
         # Wrap into DataLoaders
         train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers)

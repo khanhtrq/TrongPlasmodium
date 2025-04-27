@@ -18,6 +18,10 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
     transform = None
     model_config = {}
 
+    # --- DEBUG: Ensure num_classes is valid ---
+    if num_classes is None or not isinstance(num_classes, int) or num_classes < 1:
+        raise ValueError(f"num_classes must be a positive integer, got {num_classes}")
+
     if model_name == "resnet":
         model_ft = models.resnet50(pretrained=use_pretrained)
         set_parameter_requires_grad(model_ft, feature_extract)

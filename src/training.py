@@ -25,7 +25,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
     is_cuda = device.type == 'cuda'
     is_tpu = _tpu_available and 'xla' in str(device)
 
-    scaler = torch.cuda.amp.GradScaler(enabled=(use_amp and is_cuda))
+    scaler = torch.amp.GradScaler(enabled=(use_amp and is_cuda))
 
     history = {
         'train_loss': [], 'train_acc_macro': [], 'train_acc_weighted': [],
