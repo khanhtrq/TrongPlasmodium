@@ -141,9 +141,20 @@ if __name__ == "__main__":
         try:
             model.load_state_dict(torch.load(model_save_path, map_location=device))
             model.eval()
-            y_true, y_pred = infer_from_annotation(model, test_annotation, train_dataset.classes, root_dataset_dir, device, input_size=(input_size, input_size))
+            
+            # Use test_loader for efficient batch inference
+            y_true, y_pred = infer_from_annotation(
+                model=model, 
+                annotation_file=test_annotation,  # Only used as fallback
+                class_names=train_dataset.classes, 
+                root_dir=root_dataset_dir,  # Only used as fallback
+                device=device,
+                transform=transform,  # Only used as fallback
+                input_size=(input_size, input_size),
+                dataloader=test_loader  # Pass the test_loader we already created
+            )
         except Exception as e:
-            print(f"Error during inference setup or execution for {model_name}: {e}")
+            print(f"❌ Error during inference for {model_name}: {e}")
             continue
 
         report_file_path = os.path.join(model_dir, 'classification_report.txt')
