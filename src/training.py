@@ -95,7 +95,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                             loss.backward()
                             
                             # Apply gradient clipping for non-AMP training too
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
+                            # torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
                             
                             optimizer.step()
 
