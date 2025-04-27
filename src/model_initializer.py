@@ -80,56 +80,38 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
         model_ft.classifier[3] = nn.Linear(num_ftrs, num_classes)
         input_size = 224
 
-    elif model_name.startswith("focalnet") or model_name.startswith("lsnet") or model_name == "ese_vovnet57b" or model_name.startswith("mobilenetv4"):
+    else:
+        # Try loading any model with timm
         try:
-            if model_name.startswith("lsnet_"):
-                lsnet_variants = [
-                    "t", "t_distill", "s", "s_distill", "b", "b_distill"
-                ]
-                suffix = model_name.replace("lsnet_", "")
-                if suffix not in lsnet_variants:
-                    raise ValueError(f"Unknown lsnet variant: {suffix}")
-                timm_model_name = f"hf_hub:jameslahm/lsnet_{suffix}"
-            elif model_name == "ese_vovnet57b":
-                timm_model_name = 'ese_vovnet57b.ra4_e3600_r256_in1k'
-            else:
-                timm_model_name = model_name
-                
-            print(f"Loading timm model: {timm_model_name}")
+            print(f"Trying to load model '{model_name}' with timm...")
             model_ft = timm.create_model(
-                timm_model_name,
-                pretrained=use_pretrained,
-                num_classes=num_classes
+            model_name,
+            pretrained=use_pretrained,
+            num_classes=num_classes
             )
-            
             set_parameter_requires_grad(model_ft, feature_extract)
-            
+
             data_config = timm.data.resolve_model_data_config(model_ft)
             transform = timm.data.create_transform(**data_config, is_training=False)
-            
             input_size = data_config.get('input_size', (3, 224, 224))[-1]
-            
+
             model_config = {
-                'input_size': input_size,
-                'crop_pct': data_config.get('crop_pct', 0.875),
-                'mean': data_config.get('mean', (0.485, 0.456, 0.406)),
-                'std': data_config.get('std', (0.229, 0.224, 0.225)),
-                'interpolation': data_config.get('interpolation', 'bicubic')
+            'input_size': input_size,
+            'crop_pct': data_config.get('crop_pct', 0.875),
+            'mean': data_config.get('mean', (0.485, 0.456, 0.406)),
+            'std': data_config.get('std', (0.229, 0.224, 0.225)),
+            'interpolation': data_config.get('interpolation', 'bicubic')
             }
             print(f"Model config: {model_config}")
-            
+
         except Exception as e:
-            print(f"❌ Error loading timm model {model_name}: {e}")
+            print(f"❌ Error loading model '{model_name}' with timm: {e}")
             print("Make sure timm is installed: pip install timm")
             print("Available models in timm with this prefix:")
             matching_models = [m for m in timm.list_models() if model_name.split('_')[0] in m][:10]
             for m in matching_models:
                 print(f"  - {m}")
             exit()
-
-    else:
-        print("Invalid model name, exiting...")
-        exit()
 
     print(model_ft)
     return model_ft, input_size, transform, model_config
