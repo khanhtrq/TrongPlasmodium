@@ -10,37 +10,23 @@ class FocalLoss(nn.Module):
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
-        self.eps = 1e-6  # Small epsilon to prevent numerical instability
 
     def forward(self, inputs, targets):
-        # Apply log_softmax for numerical stability
         logpt = F.log_softmax(inputs, dim=1)
-        
-        # Get pt = exp(logpt)
         pt = torch.exp(logpt)
-        
-        # Select the appropriate values for the target class
         logpt = logpt.gather(1, targets.unsqueeze(1)).squeeze(1)
         pt = pt.gather(1, targets.unsqueeze(1)).squeeze(1)
         
-        # Apply alpha weighting if provided
-        if isinstance(self.alpha, torch.Tensor):
+        if self.alpha is not None:
             try:
                 at = self.alpha.gather(0, targets)
             except:
-                at = torch.tensor(1.0, device=inputs.device)
+                at = 1.0
         else:
-            at = torch.tensor(self.alpha, device=inputs.device)
+            at = 1.0
     
-        # Calculate focal loss with numerical stability safeguards
-        # Use clipping to prevent extreme values
-        pt_safe = torch.clamp(pt, min=self.eps, max=1.0)
-        focal_weight = at * (1 - pt_safe).pow(self.gamma)
-        
-        # Final loss calculation
-        loss = -focal_weight * logpt
+        loss = -at * (1 - pt) ** self.gamma * logpt
     
-        # Apply reduction as specified
         if self.reduction == 'mean':
             return loss.mean()
         elif self.reduction == 'sum':
@@ -48,47 +34,26 @@ class FocalLoss(nn.Module):
         return loss
 
 def compute_alpha_from_dataloader(train_loader, num_classes, device):
-    """Compute class weights from a dataloader for focal loss alpha parameter."""
-    print("Computing class weights for balanced focal loss...")
     all_labels = []
     for _, labels in train_loader:
         all_labels.extend(labels.cpu().numpy())
     
-    # Count samples per class
-    class_counts = torch.zeros(num_classes)
-    for lbl in all_labels:
-        class_counts[lbl] += 1
+    class_weights = compute_class_weight(
+        class_weight='balanced',
+        classes=np.arange(num_classes),
+        y=np.array(all_labels)
+    )
     
-    # Compute inverse frequency weights
-    total_samples = class_counts.sum()
-    class_weights = total_samples / (class_counts * num_classes + 1e-6)
-    
-    # Normalize weights to sum to num_classes
-    class_weights = class_weights * (num_classes / class_weights.sum())
-    
-    print(f"Class weights: {class_weights.tolist()}")
-    
-    return class_weights.to(device)
+    alpha = torch.tensor(class_weights, dtype=torch.float32).to(device)
+    return alpha
 
 def compute_class_weights(dataloader, num_classes, device):
-    """Alternative method to compute class weights."""
     counts = torch.zeros(num_classes, dtype=torch.float32)
     for _, labels in dataloader:
         for label in labels:
             counts[label] += 1
-    
-    # Avoid division by zero
-    counts = torch.clamp(counts, min=1.0)
-    
-    # Calculate inverse frequency weights
     total = counts.sum()
-    weights = total / (counts * num_classes)
-    
-    # Normalize weights
-    weights = weights / weights.sum() * num_classes
-    
-    print(f"Computed class weights: {weights.tolist()}")
-    
+    weights = total / (counts + 1e-6)
     return weights.to(device)
 
 
@@ -105,13 +70,18 @@ class F1Loss(nn.Module):
         self.reduction = reduction
 
     def forward(self, inputs, targets):
-        # Apply softmax for numerical stability
+        # inputs: (batch_size, num_classes) - Raw logits from the model
+        # targets: (batch_size) - Long tensor of class indices
+
+        # Apply softmax to get probabilities
         probas = F.softmax(inputs, dim=1)
 
         # Convert targets to one-hot encoding
         targets_one_hot = F.one_hot(targets, num_classes=self.num_classes).to(dtype=inputs.dtype)
+        # targets_one_hot: (batch_size, num_classes)
 
         # Calculate true positives, false positives, false negatives per class
+        # These are sums over the batch dimension
         tp = (probas * targets_one_hot).sum(dim=0)
         fp = (probas * (1 - targets_one_hot)).sum(dim=0)
         fn = ((1 - probas) * targets_one_hot).sum(dim=0)
@@ -124,6 +94,9 @@ class F1Loss(nn.Module):
         f1 = (1 + self.beta**2) * (precision * recall) / ((self.beta**2 * precision) + recall + self.epsilon)
 
         # Average F1 score across classes (macro F1)
-        f1_loss = 1 - f1.mean()
+        # The loss is 1 - F1 score
+        f1_loss = 1 - f1.mean() # Macro F1 loss
 
+        # Note: Reduction parameter isn't explicitly used here as we default to macro average loss.
+        # You could adapt this part if 'sum' or element-wise loss is needed.
         return f1_loss

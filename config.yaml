@@ -18,16 +18,11 @@ model_names:
   - mobilenetv4_hybrid_large.e600_r384_in1k
 num_epochs: 100
 patience: 20
-learning_rate: 1e-4  # Reduced from 1e-3 for stability
-step_size: 7
-gamma: 0.7
+learning_rate: 1e-3
+step_size: 5
+gamma: 0.5
 use_amp: true
-clip_grad_norm: 0.5  # Reduced from 1.0 for stronger clipping
-use_focal_loss: true  # Added to use FocalLoss for better stability
-focal_alpha: 0.25    # Alpha parameter for focal loss
-focal_gamma: 2.0     # Gamma parameter for focal loss
-use_warmup: true     # Enable learning rate warmup
-warmup_epochs: 5     # Warmup for 5 epochs
+clip_grad_norm: 1.0  # Add gradient clipping parameter
 
 # Results directory
 results_dir: 'results'

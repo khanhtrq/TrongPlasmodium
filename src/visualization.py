@@ -145,10 +145,9 @@ def smooth_curve(points, factor=0.6):
     return smoothed_points
 
 def plot_training_curves(history, title_suffix='', save_path=None):
-    plt.figure(figsize=(24, 12))
+    plt.figure(figsize=(18, 5))
 
-    # Loss curve
-    plt.subplot(2, 3, 1)
+    plt.subplot(1, 3, 1)
     plt.plot(smooth_curve(history['train_loss']), label='Train Loss')
     plt.plot(smooth_curve(history['val_loss']), label='Val Loss')
     plt.title('Loss Curve ' + title_suffix)
@@ -157,8 +156,7 @@ def plot_training_curves(history, title_suffix='', save_path=None):
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
 
-    # Accuracy curve
-    plt.subplot(2, 3, 2)
+    plt.subplot(1, 3, 2)
     plt.plot(smooth_curve(history['train_acc_macro']), label='Train Macro Accuracy')
     plt.plot(smooth_curve(history['val_acc_macro']), label='Val Macro Accuracy')
     plt.plot(smooth_curve(history['train_acc_weighted']), label='Train Weighted Accuracy')
@@ -169,8 +167,7 @@ def plot_training_curves(history, title_suffix='', save_path=None):
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
 
-    # Precision, Recall, F1 curve
-    plt.subplot(2, 3, 3)
+    plt.subplot(1, 3, 3)
     plt.plot(smooth_curve(history['val_precision']), label='Val Precision')
     plt.plot(smooth_curve(history['val_recall']), label='Val Recall')
     plt.plot(smooth_curve(history['val_f1']), label='Val F1-Score')
@@ -179,16 +176,6 @@ def plot_training_curves(history, title_suffix='', save_path=None):
     plt.ylabel('Score')
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
-    
-    # Learning rate curve - new!
-    if 'learning_rate' in history:
-        plt.subplot(2, 3, 4)
-        plt.plot(history['learning_rate'], marker='o', linestyle='-')
-        plt.title('Learning Rate ' + title_suffix)
-        plt.xlabel('Epoch')
-        plt.ylabel('Learning Rate')
-        plt.grid(True, linestyle='--', alpha=0.6)
-        plt.yscale('log')  # Log scale for better visualization of LR changes
 
     plt.tight_layout()
     
