@@ -4,8 +4,8 @@ import torch.optim as optim
 from torchvision import models
 import timm  # Add timm import
 
-import src.focalnet as focalnet  # Keep this for compatibility with existing code
-# import focalnet as focalnet  # Keep this for compatibility with existing code
+# import src.focalnet as focalnet  # Keep this for compatibility with existing code
+import focalnet as focalnet  # Keep this for compatibility with existing code
 
 def set_parameter_requires_grad(model, feature_extracting):
     if feature_extracting:
@@ -136,7 +136,7 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
 
 if __name__ == "__main__":
     
-    model_name = "mobilenetv4_hybrid_large.e600_r384_in1k"  # Example model name
+    model_name = "ese_vovnet57b"  # Example model name
     num_classes = 5  # Số lớp ví dụ
     feature_extract = False
     use_pretrained = True
@@ -159,6 +159,30 @@ if __name__ == "__main__":
         
         transformed_img = transform(img)
         print(f"Transformed shape: {transformed_img.shape}")
+
+        # Show original and transformed image side by side
+        fig, axs = plt.subplots(1, 2, figsize=(8, 4))
+        axs[0].imshow(img)
+        axs[0].set_title("Original Image")
+        axs[0].axis('off')
+
+        # Convert transformed tensor to numpy image for display
+        npimg = transformed_img.numpy()
+        if npimg.shape[0] == 1:  # grayscale
+            npimg = npimg.squeeze(0)
+        else:
+            npimg = np.transpose(npimg, (1, 2, 0))
+        # Undo normalization for display if mean/std in model_config
+        mean = model_config.get('mean', (0.485, 0.456, 0.406))
+        std = model_config.get('std', (0.229, 0.224, 0.225))
+        npimg = npimg * std + mean
+        npimg = np.clip(npimg, 0, 1)
+        axs[1].imshow(npimg)
+        axs[1].set_title("Transformed Image")
+        axs[1].axis('off')
+
+        plt.tight_layout()
+        plt.show()
 
 
 

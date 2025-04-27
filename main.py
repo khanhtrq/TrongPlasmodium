@@ -115,7 +115,7 @@ if __name__ == "__main__":
                 print(f"✅ All labels in train set are within [0, {num_classes-1}]")
         
         # Wrap into DataLoaders
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
         
@@ -126,6 +126,9 @@ if __name__ == "__main__":
         
         # Move model to device
         model = model.to(device)
+        if device.type == 'cuda' and gpu_count > 1 and multi_gpu:
+            print(f"⚡ Enabling DataParallel across {gpu_count} GPUs")
+            model = nn.DataParallel(model)
         
         # Visualize samples with model-specific transforms
         plot_sample_images_per_class(train_dataset, num_samples=3)
@@ -154,32 +157,43 @@ if __name__ == "__main__":
             print(f"⚠️ Skipping plotting for {model_name} due to missing history data.")
         # --- End Plotting ---
         
-        print(f"\n🔍 Inferencing with model: {model_name}")
+        print(f"\n🔍 Evaluating model: {model_name} on the test set")
         try:
-            model.load_state_dict(torch.load(model_save_path, map_location=device))
+            best_model_state = torch.load(model_save_path, map_location=device)
+            if isinstance(model, nn.DataParallel):
+                model.module.load_state_dict(best_model_state)
+            else:
+                model.load_state_dict(best_model_state)
             model.eval()
             
             # Use test_loader for efficient batch inference
             y_true, y_pred = infer_from_annotation(
                 model=model, 
-                annotation_file=test_annotation,  # Only used as fallback
                 class_names=train_dataset.classes, 
-                root_dir=root_dataset_dir,  # Only used as fallback
                 device=device,
-                transform=transform,  # Only used as fallback
-                input_size=(input_size, input_size),
-                dataloader=test_loader  # Pass the test_loader we already created
+                dataloader=test_loader
             )
+        except FileNotFoundError:
+            print(f"❌ Error: Best model file not found at {model_save_path}. Skipping evaluation.")
+            continue
         except Exception as e:
-            print(f"❌ Error during inference for {model_name}: {e}")
+            print(f"❌ Error during evaluation for {model_name}: {e}")
             continue
 
-        report_file_path = os.path.join(model_dir, 'classification_report.txt')
-        with open(report_file_path, 'w') as f:
-            f.write(classification_report(y_true, y_pred, target_names=train_dataset.classes, digits=4))
-        
-        cm_plot_base_path = os.path.join(model_dir, 'confusion_matrix')
-        report_classification(y_true, y_pred, train_dataset.classes, save_path_base=cm_plot_base_path)
+        if y_true and y_pred:
+            report_file_path = os.path.join(model_dir, 'classification_report.txt')
+            try:
+                report_text = classification_report(y_true, y_pred, target_names=train_dataset.classes, digits=4, zero_division=0)
+                with open(report_file_path, 'w') as f:
+                    f.write(report_text)
+                print(f"   Classification report saved to: {report_file_path}")
+            except Exception as e:
+                print(f"❌ Error saving classification report: {e}")
+
+            cm_plot_base_path = os.path.join(model_dir, 'confusion_matrix')
+            report_classification(y_true, y_pred, train_dataset.classes, save_path_base=cm_plot_base_path)
+        else:
+            print("⚠️ Skipping report generation due to inference issues.")
         
         print(f"\n🎯 Generating Grad-CAM for model: {model_name}")
         
