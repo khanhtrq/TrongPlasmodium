@@ -15,7 +15,7 @@ class_names:
 
 # Model training configuration
 model_names:
-  - deit3_base_patch16_224.fb_in1k
+  - deit3_base_patch16_224
 num_epochs: 100
 patience: 20
 learning_rate: 1e-3
