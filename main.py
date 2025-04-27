@@ -33,11 +33,11 @@ if __name__ == "__main__":
     model_names = config['model_names']
     num_epochs = config['num_epochs']
     patience = config['patience']
-    learning_rate = config['learning_rate']
+    learning_rate = float(config['learning_rate'])  # 🔧 Convert to float here!
     step_size = config['step_size']
     gamma = config['gamma']
     use_amp = config['use_amp']
-    clip_grad_norm = config.get('clip_grad_norm', 1.0)  # Add gradient clipping, default to 1.0
+    clip_grad_norm = float(config.get('clip_grad_norm', 1.0))  # Convert to float
     results_dir = config['results_dir']
     tpu_available = config['tpu_available']
     
