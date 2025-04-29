@@ -201,24 +201,43 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                 print(f'      P(Wgt): {precision_weighted:.4f} | R(Wgt): {recall_weighted:.4f} | F1(Wgt): {f1_weighted:.4f}')
 
             if phase == 'val':
-                current_val_metric = locals().get(primary_metric.replace('val_', 'epoch_'), 0.0)
+                # --- Correctly select the metric value based on primary_metric ---
+                if primary_metric == 'val_acc_macro':
+                    current_val_metric = epoch_acc_macro_avg_per_class # Use average recall for macro accuracy
+                elif primary_metric == 'val_acc_weighted':
+                    current_val_metric = epoch_acc_weighted
+                elif primary_metric == 'val_f1_macro':
+                    current_val_metric = f1_macro
+                elif primary_metric == 'val_f1_weighted':
+                    current_val_metric = f1_weighted
+                # Add other metrics like precision/recall if needed
+                else:
+                    # Default or fallback if primary_metric is misconfigured
+                    warnings.warn(f"Unrecognized primary_metric '{primary_metric}'. Defaulting to 'val_acc_macro'.")
+                    current_val_metric = epoch_acc_macro_avg_per_class
 
+                # --- Scheduler Step ---
                 if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                     scheduler.step(current_val_metric)
                 elif scheduler is not None:
+                    # Step other schedulers like StepLR, CosineAnnealingLR
                     scheduler.step()
 
                 current_lr = optimizer.param_groups[0]['lr']
                 print(f"   LR after scheduler step: {current_lr:.6f}")
 
+                # --- Check for Improvement and Save Best Model ---
                 if current_val_metric > best_val_metric:
                     print(f'✅ {primary_metric} improved ({best_val_metric:.4f} --> {current_val_metric:.4f}). Saving model to {save_path}')
                     best_val_metric = current_val_metric
-                    if isinstance(model, torch.nn.DataParallel):
-                        best_model_wts = copy.deepcopy(model.module.state_dict())
+                    # Save the model state dict
+                    model_to_save = model.module if isinstance(model, torch.nn.DataParallel) else model
+                    if is_tpu:
+                        # Save for TPU using xm.save
+                        xm.save(model_to_save.state_dict(), save_path)
                     else:
-                        best_model_wts = copy.deepcopy(model.state_dict())
-                    torch.save(best_model_wts, save_path)
+                        # Standard PyTorch save
+                        torch.save(model_to_save.state_dict(), save_path)
                     epochs_no_improve = 0
                 else:
                     epochs_no_improve += 1

@@ -277,7 +277,7 @@ def main():
                 epsilon=float(criterion_params.get('epsilon', 1e-7)),
                 reduction=criterion_params.get('reduction', 'mean')
             ).to(device)
-        elif criterion_name == 'crossentropy':
+        elif criterion_name == 'crossentropyloss':
             if criterion_params.get('use_class_weights', False):
                 ce_weights = compute_class_weights(train_loader, num_classes, device)
                 print(f"   Computed CrossEntropy weights: {ce_weights.cpu().numpy()}")
