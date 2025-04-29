@@ -21,7 +21,7 @@ model_names:
 
 # --- Training Configuration ---
 training:
-  num_epochs: 50 # Reduced for example
+  num_epochs: 5 # Reduced for example
   patience: 10   # Early stopping patience
   use_amp: true # Use Automatic Mixed Precision (requires CUDA)
   clip_grad_norm: 1.0 # Max norm for gradient clipping (set to 0 or null to disable)
