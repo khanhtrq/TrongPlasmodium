@@ -17,7 +17,7 @@ class_names:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - focalnet_base_lrf # Example timm model
+  - deit3_base_patch16_224.fb_in22k_ft_in1k
 
 # --- Training Configuration ---
 training:
