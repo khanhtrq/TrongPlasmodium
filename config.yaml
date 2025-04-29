@@ -17,7 +17,7 @@ class_names:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - mobilenetv4_hybrid_large.ix_e600_r384_in1k
+  - focalnet_base_lrf # Example timm model
 
 # --- Training Configuration ---
 training:
@@ -35,9 +35,9 @@ optimizer:
 
 # --- LR Scheduler Configuration ---
 scheduler:
-  type: StepLR # Options: StepLR, ReduceLROnPlateau, CosineAnnealingLR, etc.
-  step_size: 7 # For StepLR: Number of epochs between LR decay
-  gamma: 0.1   # For StepLR/ReduceLROnPlateau: LR decay factor
+  type: CosineAnnealingLR # Options: StepLR, ReduceLROnPlateau, CosineAnnealingLR, etc.
+  T_max: 100 # For CosineAnnealingLR: Maximum number of iterations (set to num_epochs)
+  eta_min: 1e-6 # For CosineAnnealingLR: Minimum learning rate
 
 # --- Loss Function (Criterion) Configuration ---
 criterion: CrossEntropyLoss # Options: CrossEntropyLoss, FocalLoss, F1Loss
