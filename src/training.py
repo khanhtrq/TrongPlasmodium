@@ -2,10 +2,11 @@ import copy
 import time
 from tqdm import tqdm
 import torch
-from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import precision_recall_fscore_support, accuracy_score
 import pandas as pd
 import numpy as np
 import warnings
+import torch.nn.utils as torch_utils  # For gradient clipping
 
 try:
     import torch_xla.core.xla_model as xm
@@ -18,44 +19,56 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                 log_path='training_log.csv', clip_grad_norm=1.0):
     """Trains the model, tracks history, handles early stopping, and saves the best weights."""
     since = time.time()
+
+    # --- Input Validation ---
+    if not isinstance(clip_grad_norm, (float, int)) or clip_grad_norm <= 0:
+        print(f"⚠️ Invalid clip_grad_norm value ({clip_grad_norm}). Disabling gradient clipping.")
+        clip_grad_norm = None  # Disable clipping if value is invalid
+
     best_model_wts = copy.deepcopy(model.state_dict())
-    best_acc = 0.0
+    best_val_metric = 0.0  # Use a generic name, decided by primary metric below
+    primary_metric = 'val_acc_macro'  # Metric to monitor for improvement and early stopping
     epochs_no_improve = 0
+    nan_inf_counter = 0
+    max_nan_inf_tolerance = 5  # Number of NaN/Inf batches tolerated before warning/action
 
     is_cuda = device.type == 'cuda'
     is_tpu = _tpu_available and 'xla' in str(device)
 
     # Enable GradScaler only if using CUDA and AMP
-    scaler = torch.amp.GradScaler(enabled=(use_amp and is_cuda))
+    scaler = torch.cuda.amp.GradScaler(enabled=(use_amp and is_cuda))
 
     history = {
+        'epoch': [],
         'train_loss': [], 'train_acc_macro': [], 'train_acc_weighted': [],
         'val_loss': [], 'val_acc_macro': [], 'val_acc_weighted': [],
-        'val_precision': [], 'val_recall': [], 'val_f1': []
+        'val_precision_macro': [], 'val_recall_macro': [], 'val_f1_macro': [],
+        'val_precision_weighted': [], 'val_recall_weighted': [], 'val_f1_weighted': [],
+        'lr': []
     }
 
-    nan_count = 0
-    max_nan_threshold = 5 # Tolerance for NaN/Inf losses before reducing LR
-
-    print(f"🚀 Starting training for {num_epochs} epochs...")
-    print(f"   Device: {device}, AMP: {use_amp}, Patience: {patience}, Clip Norm: {clip_grad_norm}")
+    print(f"\n🚀 Starting Training Configuration:")
+    print(f"   Model: {type(model).__name__}")
+    print(f"   Epochs: {num_epochs}, Patience: {patience}")
+    print(f"   Device: {device}, AMP: {use_amp}, Grad Clip Norm: {clip_grad_norm}")
+    print(f"   Optimizer: {type(optimizer).__name__}, LR Scheduler: {type(scheduler).__name__}")
+    print(f"   Criterion: {type(criterion).__name__}")
+    print(f"   Best Model Path: {save_path}")
+    print(f"   Log Path: {log_path}")
+    print(f"   Primary Metric for Improvement: {primary_metric}")
+    print("-" * 30)
 
     for epoch in range(num_epochs):
+        epoch_start_time = time.time()
         print(f'\nEpoch {epoch+1}/{num_epochs}')
         print('-' * 20)
-
-        # Reduce learning rate if too many NaNs occurred
-        if nan_count >= max_nan_threshold:
-            print(f"⚠️ Detected {nan_count} NaN/Inf losses. Reducing learning rate by 10x.")
-            for param_group in optimizer.param_groups:
-                param_group['lr'] *= 0.1
-            print(f"   New learning rate: {[pg['lr'] for pg in optimizer.param_groups]}")
-            nan_count = 0 # Reset counter
+        history['epoch'].append(epoch + 1)
+        history['lr'].append(optimizer.param_groups[0]['lr'])  # Log LR at start of epoch
 
         # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
             if phase == 'train':
-                model.train() # Set model to training mode
+                model.train()  # Set model to training mode
             else:
                 model.eval()  # Set model to evaluate mode
 
@@ -63,154 +76,191 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
             all_preds = []
             all_labels = []
             batch_count = 0
+            phase_start_time = time.time()
 
             # Use tqdm for progress bar
-            pbar = tqdm(dataloaders[phase], desc=f'{phase.capitalize()} Epoch {epoch+1}', leave=False)
+            pbar = tqdm(dataloaders[phase], desc=f'{phase.capitalize()} Epoch {epoch+1}', leave=False, unit="batch")
 
             for inputs, labels in pbar:
-                inputs = inputs.to(device)
-                labels = labels.to(device)
+                # Skip batch if data loading failed (indicated by empty tensors)
+                if inputs.numel() == 0 or labels.numel() == 0:
+                    warnings.warn(f"Skipping empty batch in {phase} phase (epoch {epoch+1}). Check data loading.")
+                    continue
+
+                inputs = inputs.to(device, non_blocking=True)  # Use non_blocking for potential speedup
+                labels = labels.to(device, non_blocking=True)
 
                 # Zero the parameter gradients
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)  # More memory efficient
 
                 # Forward pass
                 # Track history only in train phase
                 with torch.set_grad_enabled(phase == 'train'):
                     # Use autocast for mixed precision if enabled
-                    with torch.amp.autocast(device_type=device.type, dtype=torch.float16 if is_cuda else torch.bfloat16, enabled=use_amp):
+                    # Determine dtype based on device
+                    amp_dtype = torch.float16 if is_cuda else torch.bfloat16
+                    with torch.cuda.amp.autocast(enabled=(use_amp and is_cuda), dtype=amp_dtype):
                         outputs = model(inputs)
+                        # Ensure outputs and labels are compatible with criterion
                         loss = criterion(outputs, labels)
 
-                    # Check for NaN/Inf loss
-                    if torch.isnan(loss).item() or torch.isinf(loss).item():
-                        warnings.warn(f"⚠️ NaN/Inf loss detected in {phase} phase (epoch {epoch+1}, batch {batch_count}). Skipping batch.")
-                        if phase == 'train':
-                            nan_count += 1
-                        continue # Skip backprop for this batch
+                    # Check for NaN/Inf loss *before* backward pass
+                    if not torch.isfinite(loss).item():
+                        nan_inf_counter += 1
+                        warnings.warn(f"⚠️ NaN/Inf loss detected in {phase} phase (epoch {epoch+1}, batch {batch_count+1}). Loss: {loss.item()}. Skipping update for this batch.")
+                        if nan_inf_counter > max_nan_inf_tolerance:
+                            warnings.warn(f"   Exceeded NaN/Inf tolerance ({max_nan_inf_tolerance}). Consider checking model stability, learning rate, or data.")
+                        del outputs, loss
+                        torch.cuda.empty_cache()  # Try to clear cache if OOM might be related
+                        continue  # Skip backprop and metric calculation for this batch
 
-                    # Get predictions for metrics calculation
-                    preds = outputs.argmax(dim=1)
-                    all_preds.extend(preds.cpu().numpy())
-                    all_labels.extend(labels.cpu().numpy())
+                    # Get predictions for metrics calculation (use cpu for sklearn)
+                    preds = outputs.argmax(dim=1).detach().cpu().numpy()
+                    labels_cpu = labels.detach().cpu().numpy()
+                    all_preds.extend(preds)
+                    all_labels.extend(labels_cpu)
 
                     # Backward pass + optimize only if in training phase
                     if phase == 'train':
                         if is_cuda and use_amp:
                             scaler.scale(loss).backward()
-                            # Unscale gradients before clipping
                             scaler.unscale_(optimizer)
-                            # Clip gradients
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
-                            # Scaler step
+                            if clip_grad_norm is not None:
+                                torch_utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
                             scaler.step(optimizer)
                             scaler.update()
-                        else:
+                        elif is_tpu:  # Specific handling for TPU
                             loss.backward()
-                            # Clip gradients for non-AMP training too
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
+                            if clip_grad_norm is not None:
+                                torch_utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
+                            xm.optimizer_step(optimizer, barrier=True)  # TPU optimizer step
+                        else:  # Standard CPU or CUDA without AMP
+                            loss.backward()
+                            if clip_grad_norm is not None:
+                                torch_utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
                             optimizer.step()
-
-                        # Special step for TPU
-                        if is_tpu:
-                            xm.mark_step()
 
                 # Statistics
                 running_loss += loss.item() * inputs.size(0)
                 batch_count += 1
-                # Update tqdm progress bar description
-                pbar.set_postfix({'loss': loss.item()})
+                pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+                del inputs, labels, outputs, loss, preds, labels_cpu
+                if is_cuda:
+                    torch.cuda.empty_cache()
 
-
-            # Ensure dataset is not empty and batches were processed
-            if batch_count == 0 or len(dataloaders[phase].dataset) == 0:
+            # --- Epoch End Calculation ---
+            phase_duration = time.time() - phase_start_time
+            num_samples = len(dataloaders[phase].dataset)
+            if batch_count == 0 or num_samples == 0:
                 print(f"⚠️ No valid batches processed in {phase} phase for epoch {epoch+1}. Skipping metrics calculation.")
+                history[f'{phase}_loss'].append(float('nan'))
+                history[f'{phase}_acc_macro'].append(float('nan'))
+                history[f'{phase}_acc_weighted'].append(float('nan'))
+                if phase == 'val':
+                    history['val_precision_macro'].append(float('nan'))
+                    history['val_recall_macro'].append(float('nan'))
+                    history['val_f1_macro'].append(float('nan'))
+                    history['val_precision_weighted'].append(float('nan'))
+                    history['val_recall_weighted'].append(float('nan'))
+                    history['val_f1_weighted'].append(float('nan'))
                 continue
 
-            epoch_loss = running_loss / len(dataloaders[phase].dataset)
+            epoch_loss = running_loss / len(all_labels)
 
-            # Calculate metrics only if predictions were made
             if len(all_preds) > 0 and len(all_labels) > 0:
-                # Use macro average for primary accuracy metric (treats all classes equally)
-                # Use weighted average for secondary accuracy metric (accounts for class imbalance)
-                # Use zero_division=0 to return 0 for metrics where the denominator is 0 (e.g., precision in a class with no predictions)
                 precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(
                     all_labels, all_preds, average='macro', zero_division=0
                 )
                 precision_weighted, recall_weighted, f1_weighted, _ = precision_recall_fscore_support(
                     all_labels, all_preds, average='weighted', zero_division=0
                 )
-                # Accuracy is equivalent to recall in multiclass classification
-                epoch_acc_macro = recall_macro
-                epoch_acc_weighted = recall_weighted
+                epoch_acc_macro = accuracy_score(all_labels, all_preds)
+                epoch_acc_macro_avg_per_class = recall_macro
+                epoch_acc_weighted = accuracy_score(all_labels, all_preds)
             else:
                 print(f"⚠️ No predictions generated for {phase} phase in epoch {epoch+1}. Setting metrics to 0.")
-                epoch_acc_macro, epoch_acc_weighted = 0.0, 0.0
-                precision_macro, recall_macro, f1_macro = 0.0, 0.0, 0.0 # Needed for history
+                epoch_acc_macro_avg_per_class, epoch_acc_weighted = 0.0, 0.0
+                precision_macro, recall_macro, f1_macro = 0.0, 0.0, 0.0
+                precision_weighted, recall_weighted, f1_weighted = 0.0, 0.0, 0.0
 
-            # Log metrics
             history[f'{phase}_loss'].append(epoch_loss)
-            history[f'{phase}_acc_macro'].append(epoch_acc_macro)
+            history[f'{phase}_acc_macro'].append(epoch_acc_macro_avg_per_class)
             history[f'{phase}_acc_weighted'].append(epoch_acc_weighted)
 
             if phase == 'val':
-                history['val_precision'].append(precision_macro)
-                history['val_recall'].append(recall_macro) # Same as epoch_acc_macro
-                history['val_f1'].append(f1_macro)
+                history['val_precision_macro'].append(precision_macro)
+                history['val_recall_macro'].append(recall_macro)
+                history['val_f1_macro'].append(f1_macro)
+                history['val_precision_weighted'].append(precision_weighted)
+                history['val_recall_weighted'].append(recall_weighted)
+                history['val_f1_weighted'].append(f1_weighted)
 
-            print(f'{phase.capitalize()} Loss: {epoch_loss:.4f} | Macro Acc: {epoch_acc_macro:.4f} | Weighted Acc: {epoch_acc_weighted:.4f}')
+            print(f'{phase.capitalize():<5} Loss: {epoch_loss:.4f} | Acc (Mac): {epoch_acc_macro_avg_per_class:.4f} | Acc (Wgt): {epoch_acc_weighted:.4f} | Time: {phase_duration:.2f}s')
             if phase == 'val':
-                 print(f'          Macro P: {precision_macro:.4f} | Macro R: {recall_macro:.4f} | Macro F1: {f1_macro:.4f}')
+                print(f'      P(Mac): {precision_macro:.4f} | R(Mac): {recall_macro:.4f} | F1(Mac): {f1_macro:.4f}')
+                print(f'      P(Wgt): {precision_weighted:.4f} | R(Wgt): {recall_weighted:.4f} | F1(Wgt): {f1_weighted:.4f}')
 
-
-            # Early stopping and best model saving based on validation macro accuracy
             if phase == 'val':
-                # Step the scheduler based on validation performance
-                # Note: Some schedulers like ReduceLROnPlateau need the metric value
+                current_val_metric = locals().get(primary_metric.replace('val_', 'epoch_'), 0.0)
+
                 if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                     scheduler.step(epoch_acc_macro) # Or epoch_loss, depending on goal
-                else:
-                     scheduler.step()
+                    scheduler.step(current_val_metric)
+                elif scheduler is not None:
+                    scheduler.step()
 
                 current_lr = optimizer.param_groups[0]['lr']
-                print(f"   Current LR: {current_lr:.6f}")
+                print(f"   LR after scheduler step: {current_lr:.6f}")
 
-                if epoch_acc_macro > best_acc:
-                    print(f'✅ Validation Macro Accuracy improved ({best_acc:.4f} --> {epoch_acc_macro:.4f}). Saving model...')
-                    best_acc = epoch_acc_macro
-                    best_model_wts = copy.deepcopy(model.state_dict())
+                if current_val_metric > best_val_metric:
+                    print(f'✅ {primary_metric} improved ({best_val_metric:.4f} --> {current_val_metric:.4f}). Saving model to {save_path}')
+                    best_val_metric = current_val_metric
+                    if isinstance(model, torch.nn.DataParallel):
+                        best_model_wts = copy.deepcopy(model.module.state_dict())
+                    else:
+                        best_model_wts = copy.deepcopy(model.state_dict())
                     torch.save(best_model_wts, save_path)
                     epochs_no_improve = 0
                 else:
                     epochs_no_improve += 1
-                    print(f'📉 Validation Macro Accuracy did not improve for {epochs_no_improve} epoch(s). Best: {best_acc:.4f}')
+                    print(f'📉 {primary_metric} did not improve for {epochs_no_improve} epoch(s). Best: {best_val_metric:.4f}')
 
-        # Check for early stopping
+        epoch_duration = time.time() - epoch_start_time
+        print(f"Epoch {epoch+1} duration: {epoch_duration:.2f}s")
+
         if epochs_no_improve >= patience:
-            print(f'\n⏰ Early stopping triggered after {epoch+1} epochs.')
+            print(f'\n⏰ Early stopping triggered after {epoch+1} epochs ({patience} epochs without improvement on {primary_metric}).')
             break
 
     time_elapsed = time.time() - since
     print(f'\n🏁 Training complete in {time_elapsed//60:.0f}m {time_elapsed%60:.0f}s')
-    print(f'🏆 Best Validation Macro Accuracy: {best_acc:.4f}')
+    print(f'🏆 Best {primary_metric}: {best_val_metric:.4f} (achieved after epoch {epoch + 1 - epochs_no_improve})')
 
-    # Save training history log
     try:
-        # Ensure all history lists have the same length (pad if early stopping occurred)
         max_len = max(len(v) for v in history.values())
         for k, v in history.items():
             if len(v) < max_len:
-                # Pad with NaN for missing epochs due to early stopping
-                history[k].extend([float('nan')] * (max_len - len(v)))
+                padding_val = float('nan') if 'loss' in k or 'acc' in k or 'f1' in k or 'precision' in k or 'recall' in k else -1
+                history[k].extend([padding_val] * (max_len - len(v)))
 
         history_df = pd.DataFrame(history)
-        history_df.index.name = 'epoch' # Add epoch column
-        history_df.to_csv(log_path, index=True)
+        history_df.set_index('epoch', inplace=True)
+        history_df.to_csv(log_path, index=True, float_format='%.6f')
         print(f"💾 Training log saved to {log_path}")
     except Exception as e:
         print(f"⚠️ Could not save training log to {log_path}: {e}")
+        print("   History data:", history)
 
-    # Load best model weights back
-    print(f"🔄 Loading best model weights from {save_path}")
-    model.load_state_dict(torch.load(save_path))
+    print(f"🔄 Loading best model weights from {save_path} into model...")
+    try:
+        best_wts_loaded = torch.load(save_path, map_location=device)
+        if isinstance(model, torch.nn.DataParallel):
+            model.module.load_state_dict(best_wts_loaded)
+        else:
+            model.load_state_dict(best_wts_loaded)
+        print("   Best weights loaded successfully.")
+    except FileNotFoundError:
+        print(f"❌ Error: Best model file not found at {save_path}. Returning model with last epoch weights.")
+    except Exception as e:
+        print(f"❌ Error loading best model weights: {e}. Returning model with last epoch weights.")
+
     return model, history

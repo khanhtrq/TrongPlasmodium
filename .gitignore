@@ -55,8 +55,9 @@ logs/
 *.swo
 .DS_Store
 
-# Experiment tracking
+# Experiment tracking & Results
 wandb/
 mlruns/
 tensorboard_logs/
 results/
+results_*/ # Catch results_local, results_kaggle, etc.

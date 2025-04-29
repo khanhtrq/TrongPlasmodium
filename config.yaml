@@ -1,33 +1,59 @@
-# Dataset configuration
+# --- Dataset Configuration ---
 data_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/'
 root_dataset_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
 batch_size: 32
-num_workers: 4
+num_workers: 2 # Adjusted based on typical Kaggle limits
 
-# Class configuration
+# --- Class Configuration ---
 class_names:
   - "Ring"
   - "Trophozoite"
-  - "Schizont" 
-  - "Gemtocyte"
+  - "Schizont"
+  - "Gametocyte" # Corrected spelling
   - "Healthy RBC"
   - "Other"
 
-# Model training configuration
+# --- Model Configuration ---
 model_names:
-  - mobilenetv4_hybrid_large.e600_r384_in1k
-num_epochs: 100
-patience: 20
-learning_rate: 1e-3
-step_size: 5
-gamma: 0.5
-use_amp: false
-clip_grad_norm: 1.0  # Add gradient clipping parameter
+  # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
+  # - resnet50 # Example torchvision model
+  - efficientnet_b0 # Another timm model example
 
-# Results directory
-results_dir: 'results'
+# --- Training Configuration ---
+training:
+  num_epochs: 50 # Reduced for example
+  patience: 10   # Early stopping patience
+  use_amp: true # Use Automatic Mixed Precision (requires CUDA)
+  clip_grad_norm: 1.0 # Max norm for gradient clipping (set to 0 or null to disable)
 
-# Device configuration
-tpu_available: false
-use_cuda: true      # Whether to use CUDA (GPU) for computation
-multi_gpu: true     # Whether to use DataParallel for multi-GPU training
+# --- Optimizer Configuration ---
+optimizer:
+  type: AdamW # Options: Adam, AdamW, SGD, etc.
+  params: # Parameters specific to the optimizer type
+    # weight_decay: 0.01 # Example for AdamW
+
+# --- LR Scheduler Configuration ---
+scheduler:
+  type: StepLR # Options: StepLR, ReduceLROnPlateau, CosineAnnealingLR, etc.
+  step_size: 7 # For StepLR: Number of epochs between LR decay
+  gamma: 0.1   # For StepLR/ReduceLROnPlateau: LR decay factor
+
+# --- Loss Function (Criterion) Configuration ---
+criterion: CrossEntropyLoss # Options: CrossEntropyLoss, FocalLoss, F1Loss
+criterion_params: # Parameters specific to the criterion
+  # For FocalLoss:
+  # gamma: 2.0
+  # reduction: 'mean'
+  # For F1Loss:
+  # beta: 1.0
+  # epsilon: 1e-7
+  # For CrossEntropyLoss:
+  use_class_weights: true # Set to true to compute and use class weights
+
+# --- Results Directory ---
+results_dir: 'results_kaggle' # Separate results dir for Kaggle runs
+
+# --- Device Configuration ---
+device:
+  use_cuda: true      # Attempt to use CUDA (GPU) if available
+  multi_gpu: true     # Attempt to use DataParallel if multiple GPUs detected
