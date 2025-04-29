@@ -71,6 +71,13 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                 model.train()  # Set model to training mode
             else:
                 model.eval()  # Set model to evaluate mode
+                # --- Debug: Check validation dataloader before loop ---
+                try:
+                    print(f"Debug VAL: len(dataloaders['val']) = {len(dataloaders['val'])}")
+                    print(f"Debug VAL: len(dataloaders['val'].dataset) = {len(dataloaders['val'].dataset)}")
+                except Exception as e:
+                    print(f"Debug VAL: Error getting dataloader/dataset length - {e}")
+                # --- End Debug ---
 
             running_loss = 0.0
             all_preds = []
@@ -81,7 +88,12 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
             # Use tqdm for progress bar
             pbar = tqdm(dataloaders[phase], desc=f'{phase.capitalize()} Epoch {epoch+1}', leave=False, unit="batch")
 
-            for inputs, labels in pbar:
+            for i, (inputs, labels) in enumerate(pbar):  # Use enumerate for batch index
+                # --- Debug: Check if validation loop is entered ---
+                if phase == 'val' and i == 0:
+                    print(f"Debug VAL: Entered validation loop (batch 0). inputs.shape={inputs.shape if hasattr(inputs, 'shape') else 'N/A'}, labels.shape={labels.shape if hasattr(labels, 'shape') else 'N/A'}")
+                # --- End Debug ---
+
                 # Skip batch if data loading failed (indicated by empty tensors)
                 if inputs.numel() == 0 or labels.numel() == 0:
                     warnings.warn(f"Skipping empty batch in {phase} phase (epoch {epoch+1}). Check data loading.")
@@ -150,9 +162,20 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
 
             # --- Epoch End Calculation ---
             phase_duration = time.time() - phase_start_time
-            num_samples = len(dataloaders[phase].dataset)
+            # --- Debug: Print final batch count ---
+            if phase == 'val':
+                print(f"Debug VAL: Finished validation loop. Final batch_count = {batch_count}")
+            # --- End Debug ---
+            try:
+                num_samples = len(dataloaders[phase].dataset)
+            except TypeError:  # Handle cases where dataset might not have __len__ (though unlikely for ImageFolder)
+                print(f"⚠️ Could not determine dataset size for phase '{phase}'. Using len(all_labels) if available.")
+                num_samples = len(all_labels) if len(all_labels) > 0 else 0  # Fallback
+
             if batch_count == 0 or num_samples == 0:
-                print(f"⚠️ No valid batches processed in {phase} phase for epoch {epoch+1}. Skipping metrics calculation.")
+                # --- Enhanced Warning ---
+                print(f"⚠️ No valid batches processed in {phase} phase for epoch {epoch+1} (batch_count={batch_count}, num_samples={num_samples}). Skipping metrics calculation.")
+                # --- End Enhanced Warning ---
                 history[f'{phase}_loss'].append(float('nan'))
                 history[f'{phase}_acc_macro'].append(float('nan'))
                 history[f'{phase}_acc_weighted'].append(float('nan'))
@@ -203,7 +226,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
             if phase == 'val':
                 # --- Correctly select the metric value based on primary_metric ---
                 if primary_metric == 'val_acc_macro':
-                    current_val_metric = epoch_acc_macro_avg_per_class # Use average recall for macro accuracy
+                    current_val_metric = epoch_acc_macro_avg_per_class  # Use average recall for macro accuracy
                 elif primary_metric == 'val_acc_weighted':
                     current_val_metric = epoch_acc_weighted
                 elif primary_metric == 'val_f1_macro':
