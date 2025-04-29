@@ -9,6 +9,7 @@ import numpy as np
 import warnings
 import matplotlib
 import matplotlib.pyplot as plt
+import pprint  # Import pprint for pretty printing
 
 from src.data_loader import AnnotationDataset, collate_fn_skip_error
 from src.device_handler import get_device
@@ -47,6 +48,11 @@ def main():
     config_file = 'config.yaml'
     config = load_config(config_file)
 
+    # --- Print Loaded Configuration for Debugging ---
+    print("\n" + "="*20 + " Loaded Configuration " + "="*20)
+    pprint.pprint(config, indent=2)  # Use pprint for readable output
+    print("="*60 + "\n")
+
     # --- Extract Configuration Parameters ---
     try:
         data_dir = config['data_dir']
@@ -54,31 +60,48 @@ def main():
         batch_size = config['batch_size']
         num_workers = config['num_workers']
         model_names = config['model_names']
-        num_epochs = config['num_epochs']
-        patience = config['patience']
-        learning_rate = float(config['learning_rate'])
-        step_size = config['scheduler']['step_size']
-        gamma = config['scheduler']['gamma']
-        scheduler_type = config['scheduler'].get('type', 'StepLR').lower()
-        optimizer_type = config['optimizer'].get('type', 'Adam').lower()
-        optimizer_params = config['optimizer'].get('params', {})
+
+        # Access nested keys correctly
+        training_params = config.get('training', {})
+        optimizer_config = config.get('optimizer', {})
+        scheduler_config = config.get('scheduler', {})
+        device_config = config.get('device', {})
+
+        num_epochs = training_params.get('num_epochs', 50)  # Provide default if missing
+        patience = training_params.get('patience', 10)
+        use_amp = training_params.get('use_amp', True)
+        clip_grad_norm = float(training_params.get('clip_grad_norm', 1.0))
+
+        optimizer_type = optimizer_config.get('type', 'Adam').lower()
+        learning_rate = float(optimizer_config.get('lr', 1e-3))  # Add 'lr' under optimizer
+        optimizer_params = optimizer_config.get('params', {})
+
+        scheduler_type = scheduler_config.get('type', 'StepLR').lower()
+        step_size = scheduler_config.get('step_size', 7)  # Default step_size
+        gamma = scheduler_config.get('gamma', 0.1)  # Default gamma
+
         criterion_name = config.get('criterion', 'CrossEntropyLoss').lower()
         criterion_params = config.get('criterion_params', {})
-        use_amp = config['training']['use_amp']
-        clip_grad_norm = float(config['training'].get('clip_grad_norm', 1.0))
+
         results_dir = config['results_dir']
-        use_cuda = config['device'].get('use_cuda', True)
-        multi_gpu = config['device'].get('multi_gpu', True)
+        use_cuda = device_config.get('use_cuda', True)
+        multi_gpu = device_config.get('multi_gpu', True)
         class_names = config.get('class_names', None)
 
+        # --- Validation ---
         if not model_names: raise ValueError("❌ 'model_names' cannot be empty in config.")
+        if not isinstance(model_names, list): raise ValueError("❌ 'model_names' should be a list in config.")
         if not class_names: raise ValueError("❌ 'class_names' must be defined in config.")
+        if not isinstance(class_names, list): raise ValueError("❌ 'class_names' should be a list in config.")
+        if not results_dir: raise ValueError("❌ 'results_dir' must be defined in config.")
 
     except KeyError as e:
         print(f"❌ Error: Missing key in configuration file: {e}")
+        print("   Please ensure your config.yaml matches the expected structure.")
         exit()
     except (TypeError, ValueError) as e:
-        print(f"❌ Error: Invalid value type in configuration file: {e}")
+        print(f"❌ Error: Invalid value type or missing key in configuration file: {e}")
+        print("   Please check the data types and structure in config.yaml.")
         exit()
 
     # --- Device Setup ---

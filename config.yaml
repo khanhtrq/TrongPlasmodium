@@ -29,8 +29,9 @@ training:
 # --- Optimizer Configuration ---
 optimizer:
   type: AdamW # Options: Adam, AdamW, SGD, etc.
+  lr: 1e-3    # Learning Rate moved here
   params: # Parameters specific to the optimizer type
-    # weight_decay: 0.01 # Example for AdamW
+    weight_decay: 0.01 # Example for AdamW
 
 # --- LR Scheduler Configuration ---
 scheduler:
