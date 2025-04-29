@@ -24,12 +24,12 @@ training:
   num_epochs: 100 # Reduced for example
   patience: 20   # Early stopping patience
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
-  clip_grad_norm: 1.0 # Max norm for gradient clipping (set to 0 or null to disable)
+  clip_grad_norm: 0 # Max norm for gradient clipping (set to 0 or null to disable)
 
 # --- Optimizer Configuration ---
 optimizer:
   type: AdamW # Options: Adam, AdamW, SGD, etc.
-  lr: 1e-3    # Learning Rate moved here
+  lr: 1e-4    # Learning Rate moved here
   params: # Parameters specific to the optimizer type
     weight_decay: 0.01 # Example for AdamW
 
@@ -49,7 +49,7 @@ criterion_params: # Parameters specific to the criterion
   # beta: 1.0
   # epsilon: 1e-7
   # For CrossEntropyLoss:
-  use_class_weights: true # Set to true to compute and use class weights
+  use_class_weights: false # Set to true to compute and use class weights
 
 # --- Results Directory ---
 results_dir: 'results_kaggle' # Separate results dir for Kaggle runs
