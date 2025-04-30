@@ -17,7 +17,8 @@ class_names:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - deit3_base_patch16_224.fb_in22k_ft_in1k
+  - coat_lite_medium_384.in1k
+  - vit_base_patch16_clip_224.laion2b_ft_in12k_in1k
 
 # --- Training Configuration ---
 training:
