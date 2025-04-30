@@ -2,7 +2,7 @@ import os
 import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
-from torchvision import transforms
+from torchvision import transforms, datasets # Import datasets
 import numpy as np
 import warnings
 
@@ -158,6 +158,32 @@ class AnnotationDataset(Dataset):
                  return None, label # Return original label with None image
 
         return image, label
+
+# --- New ImageFolder Wrapper ---
+class ImageFolderWrapper(datasets.ImageFolder):
+    """
+    A wrapper around torchvision.datasets.ImageFolder to provide
+    consistent attributes with AnnotationDataset (e.g., .imgs, .loader).
+    """
+    def __init__(self, root, transform=None, target_transform=None, loader=datasets.folder.default_loader, is_valid_file=None):
+        print(f"🔍 Loading ImageFolder from: {root}")
+        super().__init__(root, transform=transform, target_transform=target_transform, loader=loader, is_valid_file=is_valid_file)
+        # Add compatibility attributes
+        # self.samples is already defined by ImageFolder as list of (filepath, class_index)
+        self.imgs = self.samples # Alias for compatibility
+        # self.targets is already defined by ImageFolder as list of class_indices
+        # self.classes is already defined by ImageFolder as list of class names
+        # self.loader is passed in __init__ and stored
+
+        if not self.samples:
+            warnings.warn(f"⚠️ No image files found in {root}. Check the directory structure and image extensions.")
+        else:
+            print(f"   Found {len(self.samples)} samples in {len(self.classes)} classes.")
+            print(f"   Classes found: {self.classes}")
+            min_target, max_target = min(self.targets), max(self.targets)
+            print(f"   Target labels range: [{min_target}, {max_target}]")
+
+    # __getitem__ and __len__ are inherited from ImageFolder
 
 # Example of a collate function to handle None values from __getitem__
 def collate_fn_skip_error(batch):

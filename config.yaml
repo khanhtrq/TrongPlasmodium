@@ -1,6 +1,21 @@
 # --- Dataset Configuration ---
-data_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/'
-root_dataset_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
+data_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/' # Base dir, potentially used by both types
+root_dataset_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs' # Specific root for annotation images
+
+# --- New Dataset Configuration ---
+dataset_config:
+  type: 'annotation' # Options: 'annotation', 'imagefolder'
+  # --- Settings for 'annotation' type ---
+  annotation_train: 'train_annotation.txt' # Relative to data_dir
+  annotation_val: 'val_annotation.txt'   # Relative to data_dir
+  annotation_test: 'test_annotation.txt'  # Relative to data_dir
+  annotation_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs' # Absolute or relative path to images referenced in annotations
+  # --- Settings for 'imagefolder' type ---
+  imagefolder_root: '/path/to/imagefolder/dataset' # Root directory containing train/val/test subdirs (e.g., /path/to/cifar10_like_data)
+  imagefolder_train_subdir: 'train' # Subdirectory for training images (e.g., imagefolder_root/train/class1/img.jpg)
+  imagefolder_val_subdir: 'val'   # Subdirectory for validation images
+  imagefolder_test_subdir: 'test'  # Subdirectory for test images
+
 batch_size: 32
 num_workers: 2 # Adjusted based on typical Kaggle limits
 
