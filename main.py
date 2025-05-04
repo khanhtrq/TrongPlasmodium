@@ -81,6 +81,7 @@ def main():
             train_ratio = 1.0
 
         class_names = config.get('class_names', None)  # Still useful for initial mapping/consistency check
+        learning_rate = float(optimizer_config.get('lr', 1e-4))  # Ensure lr is a float
 
     except KeyError as e:
         print(f"❌ Error: Missing key in configuration file: {e}")
@@ -316,7 +317,7 @@ def main():
                     print("   Optimizing all model parameters.")
 
                 print(f"\n🔧 Optimizer: {optimizer_config.get('type', 'Adam').capitalize()}")
-                optimizer = optim.Adam(params_to_update, lr=optimizer_config.get('lr', 1e-3))
+                optimizer = optim.Adam(params_to_update, lr=learning_rate)
 
                 print(f"\n📉 Criterion: {config.get('criterion', 'CrossEntropyLoss').capitalize()}")
                 criterion = nn.CrossEntropyLoss().to(device)
