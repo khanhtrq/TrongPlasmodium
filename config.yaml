@@ -6,10 +6,10 @@ root_dataset_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_T
 dataset_config:
   type: 'annotation' # Options: 'annotation', 'imagefolder'
   # --- Settings for 'annotation' type ---
-  annotation_train: 'train_annotation.txt' # Relative to data_dir
-  annotation_val: 'val_annotation.txt'   # Relative to data_dir
-  annotation_test: 'test_annotation.txt'  # Relative to data_dir
-  annotation_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs' # Absolute or relative path to images referenced in annotations
+  annotation_train: '/kaggle/input/datn-smote/smote_synthesized_output/synthesized_annotations.txt' # Use SMOTE annotation for training
+  annotation_val: 'val_annotation.txt'   # Keep original validation set (relative to data_dir)
+  annotation_test: 'test_annotation.txt'  # Keep original test set (relative to data_dir)
+  annotation_root: '/kaggle/input/datn-smote/smote_synthesized_output/images' # Use SMOTE images root for training
   # --- Settings for 'imagefolder' type ---
   imagefolder_root: '/path/to/imagefolder/dataset' # Root directory containing train/val/test subdirs (e.g., /path/to/cifar10_like_data)
   imagefolder_train_subdir: 'train' # Subdirectory for training images (e.g., imagefolder_root/train/class1/img.jpg)
@@ -32,8 +32,7 @@ class_names:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - coat_lite_medium_384.in1k
-  - vit_base_patch16_clip_224.laion2b_ft_in12k_in1k
+  - mobilenetv4_hybrid_large.e600_r384_in1k
 
 # --- Training Configuration ---
 training:
