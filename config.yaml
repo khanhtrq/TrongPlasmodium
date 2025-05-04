@@ -9,7 +9,7 @@ dataset_config:
   annotation_train: '/kaggle/input/datn-smote/smote_synthesized_output/synthesized_annotations.txt' # Use SMOTE annotation for training
   annotation_val: 'val_annotation.txt'   # Keep original validation set (relative to data_dir)
   annotation_test: 'test_annotation.txt'  # Keep original test set (relative to data_dir)
-  annotation_root: '/kaggle/input/datn-smote/smote_synthesized_output/images' # Use SMOTE images root for training
+  annotation_root: '/kaggle/input/datn-smote/smote_synthesized_output' # Use SMOTE images root for training
   # --- Settings for 'imagefolder' type ---
   imagefolder_root: '/path/to/imagefolder/dataset' # Root directory containing train/val/test subdirs (e.g., /path/to/cifar10_like_data)
   imagefolder_train_subdir: 'train' # Subdirectory for training images (e.g., imagefolder_root/train/class1/img.jpg)
