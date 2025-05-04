@@ -1,20 +1,29 @@
 # --- Dataset Configuration ---
-data_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/' # Base dir, potentially used by both types
-root_dataset_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs' # Specific root for annotation images
+data_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/' # Base dir for relative paths if needed
 
-# --- New Dataset Configuration ---
-dataset_config:
-  type: 'annotation' # Options: 'annotation', 'imagefolder'
-  # --- Settings for 'annotation' type ---
-  annotation_train: '/kaggle/input/datn-smote/smote_synthesized_output/synthesized_annotations.txt' # Use SMOTE annotation for training
-  annotation_val: 'val_annotation.txt'   # Keep original validation set (relative to data_dir)
-  annotation_test: 'test_annotation.txt'  # Keep original test set (relative to data_dir)
-  annotation_root: '/kaggle/input/datn-smote/smote_synthesized_output' # Use SMOTE images root for training
-  # --- Settings for 'imagefolder' type ---
-  imagefolder_root: '/path/to/imagefolder/dataset' # Root directory containing train/val/test subdirs (e.g., /path/to/cifar10_like_data)
-  imagefolder_train_subdir: 'train' # Subdirectory for training images (e.g., imagefolder_root/train/class1/img.jpg)
-  imagefolder_val_subdir: 'val'   # Subdirectory for validation images
-  imagefolder_test_subdir: 'test'  # Subdirectory for test images
+# --- Datasets Configuration (List) ---
+datasets:
+  - type: 'annotation' # First dataset definition (e.g., SMOTE for training)
+    # Settings for 'annotation' type
+    annotation_train: '/kaggle/input/datn-smote/smote_synthesized_output/synthesized_annotations.txt'
+    annotation_val: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/val_annotation.txt' # Use original val
+    annotation_test: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/test_annotation.txt' # Use original test
+    annotation_root: '/kaggle/input/datn-smote/smote_synthesized_output' # Root for THIS dataset's images
+    # If val/test annotations use different root, specify explicitly or adjust AnnotationDataset
+    # annotation_val_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
+    # annotation_test_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
+
+  - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
+    annotation_train: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/train_annotation.txt'
+    annotation_val: null # Can be null if val/test are taken from the first dataset
+    annotation_test: null
+    annotation_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
+
+  # - type: 'imagefolder' # Optional: Example ImageFolder definition
+  #   imagefolder_root: '/path/to/cifar10_like_data'
+  #   imagefolder_train_subdir: 'train'
+  #   imagefolder_val_subdir: 'val'
+  #   imagefolder_test_subdir: 'test'
 
 batch_size: 32
 num_workers: 2 # Adjusted based on typical Kaggle limits
@@ -40,6 +49,7 @@ training:
   patience: 20   # Early stopping patience
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
   clip_grad_norm: 0 # Max norm for gradient clipping (set to 0 or null to disable)
+  train_ratio: 1.0 # Ratio of the (combined) training set to use (1.0 = 100%, 0.1 = 10%)
 
 # --- Optimizer Configuration ---
 optimizer:

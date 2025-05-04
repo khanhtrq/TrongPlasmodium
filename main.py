@@ -2,7 +2,7 @@ import os
 import yaml
 import torch
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset, ConcatDataset  # Import Subset and ConcatDataset
 import torch.nn as nn
 from torchvision import transforms, datasets  # Ensure datasets is imported
 import numpy as np
@@ -11,6 +11,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import pprint  # Import pprint for pretty printing
 import gc  # Import garbage collector
+import math  # For ceiling function
 
 from src.data_loader import AnnotationDataset, ImageFolderWrapper, collate_fn_skip_error  # Import ImageFolderWrapper
 from src.device_handler import get_device
@@ -56,65 +57,30 @@ def main():
 
     # --- Extract Configuration Parameters ---
     try:
-        data_dir = config['data_dir']
-        root_dataset_dir = config['root_dataset_dir']
-        initial_batch_size = config['batch_size']  # Store the initial batch size
+        data_dir = config['data_dir']  # Base directory
+        initial_batch_size = config['batch_size']
         num_workers = config['num_workers']
         model_names = config['model_names']
 
-        # Access nested keys correctly
+        datasets_config_list = config.get('datasets', [])  # Get the list of dataset configs
+        if not datasets_config_list:
+            raise ValueError("❌ 'datasets' list cannot be empty in config.")
+
         training_params = config.get('training', {})
         optimizer_config = config.get('optimizer', {})
         scheduler_config = config.get('scheduler', {})
         device_config = config.get('device', {})
-        dataset_cfg = config.get('dataset_config', {})
-        dataset_type = dataset_cfg.get('type', 'annotation').lower()  # Default to annotation
 
-        # Annotation specific paths (relative to data_dir)
-        annotation_train_file = dataset_cfg.get('annotation_train', 'train_annotation.txt')
-        annotation_val_file = dataset_cfg.get('annotation_val', 'val_annotation.txt')
-        annotation_test_file = dataset_cfg.get('annotation_test', 'test_annotation.txt')
-        annotation_root = dataset_cfg.get('annotation_root', root_dataset_dir)  # Use specific root or fallback
-
-        # ImageFolder specific paths
-        imagefolder_root = dataset_cfg.get('imagefolder_root')
-        imagefolder_train_subdir = dataset_cfg.get('imagefolder_train_subdir', 'train')
-        imagefolder_val_subdir = dataset_cfg.get('imagefolder_val_subdir', 'val')
-        imagefolder_test_subdir = dataset_cfg.get('imagefolder_test_subdir', 'test')
-
-        num_epochs = training_params.get('num_epochs', 50)  # Provide default if missing
+        num_epochs = training_params.get('num_epochs', 50)
         patience = training_params.get('patience', 10)
         use_amp = training_params.get('use_amp', True)
         clip_grad_norm = float(training_params.get('clip_grad_norm', 1.0))
+        train_ratio = float(training_params.get('train_ratio', 1.0))  # Get train ratio
+        if not (0.0 < train_ratio <= 1.0):
+            warnings.warn(f"⚠️ Invalid train_ratio ({train_ratio}). Clamping to 1.0.")
+            train_ratio = 1.0
 
-        optimizer_type = optimizer_config.get('type', 'Adam').lower()
-        learning_rate = float(optimizer_config.get('lr', 1e-3))  # Add 'lr' under optimizer
-        optimizer_params = optimizer_config.get('params', {})
-
-        scheduler_type = scheduler_config.get('type', 'StepLR').lower()
-        step_size = scheduler_config.get('step_size', 7)  # Default step_size
-        gamma = scheduler_config.get('gamma', 0.1)  # Default gamma
-
-        criterion_name = config.get('criterion', 'CrossEntropyLoss').lower()
-        criterion_params = config.get('criterion_params', {})
-
-        results_dir = config['results_dir']
-        use_cuda = device_config.get('use_cuda', True)
-        multi_gpu = device_config.get('multi_gpu', True)
-        class_names = config.get('class_names', None)  # Keep class_names for annotation mapping
-
-        # --- Validation ---
-        if not model_names: raise ValueError("❌ 'model_names' cannot be empty in config.")
-        if not isinstance(model_names, list): raise ValueError("❌ 'model_names' should be a list in config.")
-        if dataset_type == 'imagefolder' and not imagefolder_root:
-            raise ValueError("❌ 'imagefolder_root' must be defined in config when dataset_config.type is 'imagefolder'.")
-        if dataset_type == 'annotation' and (not annotation_root):
-            warnings.warn("⚠️ 'annotation_root' not explicitly defined for 'annotation' dataset type. Using 'root_dataset_dir' as fallback.")
-            annotation_root = root_dataset_dir  # Fallback if needed
-        if dataset_type == 'annotation' and not class_names:
-            raise ValueError("❌ 'class_names' must be defined in config for 'annotation' dataset type.")
-        if dataset_type == 'annotation' and not isinstance(class_names, list):
-            raise ValueError("❌ 'class_names' should be a list in config for 'annotation' dataset type.")
+        class_names = config.get('class_names', None)  # Still useful for initial mapping/consistency check
 
     except KeyError as e:
         print(f"❌ Error: Missing key in configuration file: {e}")
@@ -126,27 +92,27 @@ def main():
         exit()
 
     # --- Device Setup ---
-    device, gpu_count = get_device(use_cuda, multi_gpu)
+    device, gpu_count = get_device(device_config.get('use_cuda', True), device_config.get('multi_gpu', True))
     print(f"\n🖥️ Device Selected: {device}")
     if device.type == 'cuda':
         print(f"   Number of GPUs available/requested: {gpu_count}")
         if gpu_count > 0:
             for i in range(torch.cuda.device_count()):
                 print(f"   GPU {i}: {torch.cuda.get_device_name(i)}")
-        if gpu_count == 0 and use_cuda:
+        if gpu_count == 0 and device_config.get('use_cuda', True):
             print("   ⚠️ CUDA requested but not available. Falling back to CPU.")
     elif device.type == 'cpu':
         print("   Running on CPU.")
 
     # --- Class Information ---
-    if class_names:
-        num_classes = len(class_names)
+    final_class_names = class_names
+    num_classes = len(class_names) if class_names else None
+    if final_class_names:
         print(f"\n📋 Class Information (from config):")
         print(f"   Number of classes: {num_classes}")
-        print(f"   Class names: {class_names}")
+        print(f"   Class names: {final_class_names}")
     else:
-        num_classes = None  # Will be determined after dataset loading if using ImageFolder
-        print(f"\n📋 Class Information: Class names not provided in config, will be inferred from dataset if possible.")
+        print(f"\n📋 Class Information: Class names not provided, will be inferred from the first dataset.")
 
     # --- Default Data Transformations ---
     default_input_size = 224
@@ -158,47 +124,30 @@ def main():
     print(f"\n🔄 Default Transform Pipeline (used if model-specific is unavailable):")
     print(default_transform)
 
-    # --- Dataset Paths (Informational Print) ---
-    if dataset_type == 'annotation':
-        train_annotation = os.path.join(data_dir, annotation_train_file)
-        val_annotation = os.path.join(data_dir, annotation_val_file)
-        test_annotation = os.path.join(data_dir, annotation_test_file)
-        print("\n💾 Dataset Type: Annotation")
-        print(f"   Train Annot: {train_annotation}")
-        print(f"   Val Annot: {val_annotation}")
-        print(f"   Test Annot: {test_annotation}")
-        print(f"   Image Root: {annotation_root}")
-    elif dataset_type == 'imagefolder':
-        train_dir = os.path.join(imagefolder_root, imagefolder_train_subdir)
-        val_dir = os.path.join(imagefolder_root, imagefolder_val_subdir)
-        test_dir = os.path.join(imagefolder_root, imagefolder_test_subdir)
-        print("\n💾 Dataset Type: ImageFolder")
-        print(f"   Train Dir: {train_dir}")
-        print(f"   Val Dir: {val_dir}")
-        print(f"   Test Dir: {test_dir}")
-    else:
-        print(f"❌ Error: Unknown dataset type '{dataset_type}' in config.")
-        exit()
+    # --- Dataset Paths (Informational Print - Adjusted) ---
+    print("\n💾 Defined Dataset Sources:")
+    for i, d_cfg in enumerate(datasets_config_list):
+        print(f"   Source {i+1}: Type = {d_cfg.get('type', 'N/A')}")
 
     # --- Training and Evaluation Loop ---
     for model_name in model_names:
         print(f"\n{'='*25} Processing Model: {model_name} {'='*25}")
 
         # --- Create Results Directory for this Model ---
-        model_results_dir = os.path.join(results_dir, model_name)
+        model_results_dir = os.path.join(config['results_dir'], model_name)
         os.makedirs(model_results_dir, exist_ok=True)
         print(f"   Results will be saved in: {model_results_dir}")
 
         # --- OOM Retry Loop ---
-        current_batch_size = initial_batch_size  # Reset batch size for each new model
+        current_batch_size = initial_batch_size
         model_trained_successfully = False
-        history = None  # Initialize history outside the loop
+        history = None
 
-        while current_batch_size >= 1:  # Retry until batch size is too small
+        while current_batch_size >= 1:
             print(f"\n🔄 Attempting training for '{model_name}' with batch size: {current_batch_size}")
             try:
                 # --- Initialize Model and Get Model-Specific Config ---
-                temp_num_classes = num_classes if num_classes is not None else 1  # Placeholder if inferring
+                temp_num_classes = num_classes if num_classes is not None else 1
                 model, input_size, model_specific_transform, model_config = initialize_model(
                     model_name, num_classes=temp_num_classes, use_pretrained=True, feature_extract=False
                 )
@@ -223,77 +172,142 @@ def main():
                         transforms.Normalize(mean=model_config['mean'], std=model_config['std'])
                     ])
 
-                # --- Load Datasets (Conditional Logic) ---
-                print("\n⏳ Loading datasets...")
-                try:
-                    if dataset_type == 'annotation':
-                        train_dataset = AnnotationDataset(train_annotation, annotation_root, transform=transform_train, class_names=class_names)
-                        val_dataset = AnnotationDataset(val_annotation, annotation_root, transform=transform_eval, class_names=class_names)
-                        test_dataset = AnnotationDataset(test_annotation, annotation_root, transform=transform_eval, class_names=class_names)
-                        loaded_class_names = train_dataset.classes
-                    elif dataset_type == 'imagefolder':
-                        train_dataset = ImageFolderWrapper(root=train_dir, transform=transform_train)
-                        val_dataset = ImageFolderWrapper(root=val_dir, transform=transform_eval)
-                        test_dataset = ImageFolderWrapper(root=test_dir, transform=transform_eval)
-                        loaded_class_names = train_dataset.classes
-                        if class_names and loaded_class_names != class_names:
-                            warnings.warn(f"⚠️ Class names inferred by ImageFolder ({loaded_class_names}) differ from config ({class_names}). Using inferred names.")
-                    else:
-                        raise ValueError(f"Invalid dataset_type '{dataset_type}' during dataset loading.")
+                # --- Load Multiple Datasets ---
+                print("\n⏳ Loading datasets from configured sources...")
+                train_datasets_list = []
+                val_datasets_list = []
+                test_datasets_list = []
+                first_dataset_loaded = False
 
-                    if num_classes is None:
-                        num_classes = len(loaded_class_names)
-                        class_names = loaded_class_names
-                        print(f"   Inferred {num_classes} classes: {class_names}")
-                        if temp_num_classes != num_classes:
-                            print(f"   Re-initializing model '{model_name}' with inferred {num_classes} classes...")
-                            del model
-                            if device.type == 'cuda': torch.cuda.empty_cache()
-                            model, input_size, model_specific_transform, model_config = initialize_model(
-                                model_name, num_classes=num_classes, use_pretrained=True, feature_extract=False
-                            )
+                for i, d_cfg in enumerate(datasets_config_list):
+                    print(f"   Loading Source {i+1} (Type: {d_cfg.get('type', 'N/A')})...")
+                    dataset_type = d_cfg.get('type', 'annotation').lower()
+                    current_train_dataset, current_val_dataset, current_test_dataset = None, None, None
 
-                    print("   Datasets loaded successfully.")
+                    try:
+                        if dataset_type == 'annotation':
+                            ann_train_path = d_cfg.get('annotation_train')
+                            ann_val_path = d_cfg.get('annotation_val')
+                            ann_test_path = d_cfg.get('annotation_test')
+                            ann_root = d_cfg.get('annotation_root', data_dir)
+                            train_root = d_cfg.get('annotation_train_root', ann_root)
+                            val_root = d_cfg.get('annotation_val_root', ann_root)
+                            test_root = d_cfg.get('annotation_test_root', ann_root)
 
-                    if current_batch_size == initial_batch_size:
-                        plot_class_distribution_with_ratios(train_dataset, title="Training Set Class Distribution")
+                            def resolve_path(base, p):
+                                return os.path.join(base, p) if p and not os.path.isabs(p) else p
+
+                            if ann_train_path:
+                                current_train_dataset = AnnotationDataset(resolve_path(data_dir, ann_train_path), train_root, transform=transform_train, class_names=final_class_names)
+                            if ann_val_path:
+                                current_val_dataset = AnnotationDataset(resolve_path(data_dir, ann_val_path), val_root, transform=transform_eval, class_names=final_class_names)
+                            if ann_test_path:
+                                current_test_dataset = AnnotationDataset(resolve_path(data_dir, ann_test_path), test_root, transform=transform_eval, class_names=final_class_names)
+
+                        elif dataset_type == 'imagefolder':
+                            imgf_root = d_cfg.get('imagefolder_root')
+                            if not imgf_root: raise ValueError(f"Source {i+1}: 'imagefolder_root' is required for type 'imagefolder'.")
+                            imgf_train_subdir = d_cfg.get('imagefolder_train_subdir', 'train')
+                            imgf_val_subdir = d_cfg.get('imagefolder_val_subdir', 'val')
+                            imgf_test_subdir = d_cfg.get('imagefolder_test_subdir', 'test')
+
+                            train_dir = os.path.join(imgf_root, imgf_train_subdir)
+                            val_dir = os.path.join(imgf_root, imgf_val_subdir)
+                            test_dir = os.path.join(imgf_root, imgf_test_subdir)
+
+                            if os.path.isdir(train_dir):
+                                current_train_dataset = ImageFolderWrapper(root=train_dir, transform=transform_train)
+                            if os.path.isdir(val_dir):
+                                current_val_dataset = ImageFolderWrapper(root=val_dir, transform=transform_eval)
+                            if os.path.isdir(test_dir):
+                                current_test_dataset = ImageFolderWrapper(root=test_dir, transform=transform_eval)
+                        else:
+                            raise ValueError(f"Source {i+1}: Invalid dataset_type '{dataset_type}'.")
+
+                        dataset_to_check = current_train_dataset or current_val_dataset or current_test_dataset
+                        if dataset_to_check:
+                            current_classes = dataset_to_check.classes
+                            if not first_dataset_loaded:
+                                if final_class_names is None:
+                                    final_class_names = current_classes
+                                    num_classes = len(final_class_names)
+                                    print(f"   Inferred {num_classes} classes from first dataset: {final_class_names}")
+                                    if temp_num_classes != num_classes:
+                                        print(f"   Re-initializing model '{model_name}' with inferred {num_classes} classes...")
+                                        del model; gc.collect(); torch.cuda.empty_cache()
+                                        model, input_size, model_specific_transform, model_config = initialize_model(model_name, num_classes=num_classes, use_pretrained=True, feature_extract=False)
+                                        if model_specific_transform: transform_train = transform_eval = model_specific_transform
+                                        else:
+                                            transform_train = transforms.Compose([transforms.Resize((input_size, input_size)), transforms.RandomHorizontalFlip(), transforms.RandomRotation(10), transforms.ToTensor(), transforms.Normalize(mean=model_config['mean'], std=model_config['std'])])
+                                            transform_eval = transforms.Compose([transforms.Resize((input_size, input_size)), transforms.ToTensor(), transforms.Normalize(mean=model_config['mean'], std=model_config['std'])])
+                                elif final_class_names != current_classes:
+                                    raise ValueError(f"Source {i+1}: Class name mismatch! Expected {final_class_names} but found {current_classes}.")
+                                first_dataset_loaded = True
+                            elif final_class_names != current_classes:
+                                raise ValueError(f"Source {i+1}: Class name mismatch! Expected {final_class_names} but found {current_classes}.")
+
+                            if current_train_dataset: train_datasets_list.append(current_train_dataset)
+                            if current_val_dataset: val_datasets_list.append(current_val_dataset)
+                            if current_test_dataset: test_datasets_list.append(current_test_dataset)
+                        else:
+                            print(f"   Source {i+1}: No valid dataset splits found.")
+
+                    except Exception as e:
+                        print(f"❌ Error loading dataset source {i+1}: {e}")
+                        raise e
+
+                if not train_datasets_list:
+                    raise ValueError("❌ No training datasets were loaded successfully.")
+                if not val_datasets_list:
+                    warnings.warn("⚠️ No validation datasets were loaded. Validation phase will be skipped.")
+                if not test_datasets_list:
+                    warnings.warn("⚠️ No test datasets were loaded. Final evaluation will be skipped.")
+
+                if len(train_datasets_list) > 1:
+                    print(f"   Concatenating {len(train_datasets_list)} training datasets...")
+                    final_train_dataset_full = ConcatDataset(train_datasets_list)
+                    print(f"   Combined training set size: {len(final_train_dataset_full)}")
+                else:
+                    final_train_dataset_full = train_datasets_list[0]
+                    print(f"   Using single training dataset (size: {len(final_train_dataset_full)})")
+
+                if train_ratio < 1.0:
+                    num_train_samples = len(final_train_dataset_full)
+                    subset_size = math.ceil(num_train_samples * train_ratio)
+                    print(f"   Applying train_ratio: {train_ratio:.2f} -> Using {subset_size}/{num_train_samples} training samples.")
+                    indices = torch.randperm(num_train_samples)[:subset_size].tolist()
+                    final_train_dataset = Subset(final_train_dataset_full, indices)
+                    if not hasattr(final_train_dataset, 'classes'): final_train_dataset.classes = final_class_names
+                else:
+                    final_train_dataset = final_train_dataset_full
+                    print(f"   Using full training set (ratio: {train_ratio:.2f}).")
+
+                final_val_dataset = val_datasets_list[0] if val_datasets_list else None
+                final_test_dataset = test_datasets_list[0] if test_datasets_list else None
+
+                print("   Datasets finalized.")
+
+                if current_batch_size == initial_batch_size:
+                    print("\n📊 Analyzing Combined Training Set Distribution (Before Ratio):")
+                    plot_class_distribution_with_ratios(final_train_dataset_full, title="Combined Training Set Class Distribution")
+                    if final_val_dataset and final_test_dataset:
                         analyze_class_distribution_across_splits({
-                            'Train': train_dataset,
-                            'Validation': val_dataset,
-                            'Test': test_dataset
+                            'Train (Full)': final_train_dataset_full,
+                            'Validation': final_val_dataset,
+                            'Test': final_test_dataset
                         })
-                        plot_sample_images_per_class(train_dataset, num_samples=min(5, current_batch_size), model_config=model_config)
+                    plot_sample_images_per_class(final_train_dataset_full, num_samples=min(5, current_batch_size), model_config=model_config)
 
-                except FileNotFoundError as e:
-                    print(f"❌ Error: Dataset file/directory not found: {e}.")
-                    print("   Check paths in config.yaml ('data_dir', 'annotation_*', 'imagefolder_*').")
-                    print("   Skipping this model attempt.")
-                    break
-                except ValueError as e:
-                    print(f"❌ Error loading dataset: {e}.")
-                    print("   Check annotation file format, class name consistency, or image folder structure.")
-                    print("   Skipping this model attempt.")
-                    break
-                except Exception as e:
-                    print(f"❌ An unexpected error occurred while loading datasets: {e}")
-                    print("   Skipping this model attempt.")
-                    break
+                train_loader = DataLoader(final_train_dataset, batch_size=current_batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0)
+                val_loader = DataLoader(final_val_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0) if final_val_dataset else None
+                test_loader = DataLoader(final_test_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0) if final_test_dataset else None
 
-                # --- Create DataLoaders ---
-                train_loader = DataLoader(train_dataset, batch_size=current_batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0)
-                val_loader = DataLoader(val_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0)
-                test_loader = DataLoader(test_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0)
                 print(f"\n📦 DataLoaders created (Batch size: {current_batch_size}, Workers: {num_workers})")
+                dataloaders = {'train': train_loader}
+                if val_loader: dataloaders['val'] = val_loader
 
-                dataloaders = {'train': train_loader, 'val': val_loader}
-
-                # --- Model Setup ---
                 model = model.to(device)
-                if device.type == 'cuda' and gpu_count > 1 and multi_gpu:
-                    print(f"⚡ Enabling DataParallel across {gpu_count} GPUs for model '{model_name}'")
-                    model = nn.DataParallel(model)
 
-                # --- Define Optimizer ---
                 params_to_update = model.parameters()
                 if config.get('feature_extract', False):
                     print("   Optimizing only classifier parameters.")
@@ -301,60 +315,15 @@ def main():
                 else:
                     print("   Optimizing all model parameters.")
 
-                print(f"\n🔧 Optimizer: {optimizer_type.capitalize()}")
-                if optimizer_type == 'adam':
-                    optimizer = optim.Adam(params_to_update, lr=learning_rate, **optimizer_params)
-                elif optimizer_type == 'adamw':
-                    optimizer = optim.AdamW(params_to_update, lr=learning_rate, **optimizer_params)
-                elif optimizer_type == 'sgd':
-                    optimizer = optim.SGD(params_to_update, lr=learning_rate, **optimizer_params)
-                else:
-                    print(f"⚠️ Unknown optimizer type '{optimizer_type}'. Defaulting to Adam.")
-                    optimizer = optim.Adam(params_to_update, lr=learning_rate)
-                print(f"   Initial Learning Rate: {learning_rate}")
-                print(f"   Optimizer Params: {optimizer_params}")
+                print(f"\n🔧 Optimizer: {optimizer_config.get('type', 'Adam').capitalize()}")
+                optimizer = optim.Adam(params_to_update, lr=optimizer_config.get('lr', 1e-3))
 
-                # --- Define Loss Function ---
-                print(f"\n📉 Criterion: {criterion_name.capitalize()}")
-                if criterion_name == 'focalloss':
-                    alpha_weights = compute_class_weights(train_loader, num_classes, device)
-                    print(f"   Computed FocalLoss alpha (class weights): {alpha_weights.cpu().numpy()}")
-                    criterion = FocalLoss(
-                        alpha=alpha_weights,
-                        gamma=float(criterion_params.get('gamma', 2.0)),
-                        reduction=criterion_params.get('reduction', 'mean')
-                    ).to(device)
-                elif criterion_name == 'f1loss':
-                    criterion = F1Loss(
-                        num_classes=num_classes,
-                        beta=float(criterion_params.get('beta', 1.0)),
-                        epsilon=float(criterion_params.get('epsilon', 1e-7)),
-                        reduction=criterion_params.get('reduction', 'mean')
-                    ).to(device)
-                elif criterion_name == 'crossentropyloss':
-                    if criterion_params.get('use_class_weights', False):
-                        ce_weights = compute_class_weights(train_loader, num_classes, device)
-                        print(f"   Computed CrossEntropy weights: {ce_weights.cpu().numpy()}")
-                        criterion = nn.CrossEntropyLoss(weight=ce_weights).to(device)
-                    else:
-                        criterion = nn.CrossEntropyLoss().to(device)
-                else:
-                    print(f"⚠️ Unknown criterion '{criterion_name}'. Defaulting to CrossEntropyLoss.")
-                    criterion = nn.CrossEntropyLoss().to(device)
+                print(f"\n📉 Criterion: {config.get('criterion', 'CrossEntropyLoss').capitalize()}")
+                criterion = nn.CrossEntropyLoss().to(device)
 
-                # --- Define LR Scheduler ---
-                print(f"\n📅 LR Scheduler: {scheduler_type.capitalize()}")
-                if scheduler_type == 'steplr':
-                    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
-                elif scheduler_type == 'reducelronplateau':
-                    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=gamma, patience=patience // 2, verbose=True)
-                elif scheduler_type == 'cosineannealinglr':
-                    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=learning_rate * 0.01)
-                else:
-                    print(f"⚠️ Unknown scheduler type '{scheduler_type}'. Defaulting to StepLR.")
-                    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+                print(f"\n📅 LR Scheduler: {scheduler_config.get('type', 'StepLR').capitalize()}")
+                scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_config.get('step_size', 7), gamma=scheduler_config.get('gamma', 0.1))
 
-                # --- Start Training ---
                 print(f"\n🏋️ Starting training for model: {model_name} (Batch Size: {current_batch_size})...")
                 model_save_path = os.path.join(model_results_dir, f'{model_name}_best.pth')
                 log_save_path = os.path.join(model_results_dir, f'{model_name}_training_log.csv')
@@ -401,14 +370,6 @@ def main():
                     traceback.print_exc()
                     print("   Skipping this model.")
                     break
-            except FileNotFoundError as e:
-                print(f"❌ Error: Dataset file not found during retry: {e}. Check 'data_dir' and annotation file names.")
-                print("   Skipping this model.")
-                break
-            except ValueError as e:
-                print(f"❌ Error loading dataset during retry: {e}. Check annotation file format or class name consistency.")
-                print("   Skipping this model.")
-                break
             except Exception as e:
                 print(f"❌❌❌ An unexpected error occurred during training setup or execution for model {model_name}: {e}")
                 import traceback
@@ -431,14 +392,14 @@ def main():
 
             y_true, y_pred = infer_from_annotation(
                 model=model,
-                class_names=class_names,
+                class_names=final_class_names,
                 device=device,
                 dataloader=test_loader
             )
 
             if y_true and y_pred:
                 report_base_path = os.path.join(model_results_dir, f'{model_name}_test_eval')
-                report_classification(y_true, y_pred, class_names, save_path_base=report_base_path)
+                report_classification(y_true, y_pred, final_class_names, save_path_base=report_base_path)
             else:
                 print("   ⚠️ Skipping evaluation report generation due to inference issues or empty results.")
 
@@ -448,7 +409,7 @@ def main():
             try:
                 generate_and_save_gradcam_per_class(
                     model=model,
-                    dataset=test_dataset,
+                    dataset=final_test_dataset,
                     save_dir=gradcam_save_dir,
                     model_config=model_config,
                     device=device
@@ -464,14 +425,10 @@ def main():
         else:
             print(f"\n❌ Model '{model_name}' could not be trained successfully (due to OOM or other errors).")
 
-        del model, train_dataset, val_dataset, test_dataset
-        if 'train_loader' in locals(): del train_loader
-        if 'val_loader' in locals(): del val_loader
-        if 'test_loader' in locals(): del test_loader
-        if 'optimizer' in locals(): del optimizer
-        if 'criterion' in locals(): del criterion
-        if 'scheduler' in locals(): del scheduler
-        if 'history' in locals(): del history
+        del model, train_datasets_list, val_datasets_list, test_datasets_list
+        if 'final_train_dataset' in locals(): del final_train_dataset
+        if 'final_val_dataset' in locals(): del final_val_dataset
+        if 'final_test_dataset' in locals(): del final_test_dataset
         gc.collect()
         if device.type == 'cuda': torch.cuda.empty_cache()
 
