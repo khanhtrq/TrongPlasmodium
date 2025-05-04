@@ -49,7 +49,7 @@ training:
   patience: 20   # Early stopping patience
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
   clip_grad_norm: 0 # Max norm for gradient clipping (set to 0 or null to disable)
-  train_ratio: 1.0 # Ratio of the (combined) training set to use (1.0 = 100%, 0.1 = 10%)
+  train_ratio: 0.5 # Ratio of the (combined) training set to use (1.0 = 100%, 0.1 = 10%)
 
 # --- Optimizer Configuration ---
 optimizer:
