@@ -294,14 +294,14 @@ def main():
                 print("   Datasets finalized.")
 
                 if current_batch_size == initial_batch_size:
-                    print("\n📊 Analyzing Final Training Set Distribution:")
-                    if hasattr(final_train_dataset, 'targets') and hasattr(final_train_dataset, 'classes') and final_train_dataset.targets:
-                        plot_class_distribution_with_ratios(final_train_dataset, title="Final Training Set Class Distribution")
+                    print("\n📊 Analyzing Full Training Set Distribution:")
+                    if hasattr(final_train_dataset_full, 'targets') and hasattr(final_train_dataset_full, 'classes') and final_train_dataset_full.targets:
+                        plot_class_distribution_with_ratios(final_train_dataset_full, title="Full Training Set Class Distribution")
                     else:
-                        warnings.warn("⚠️ Cannot plot training set distribution: Final training dataset missing 'targets' or 'classes' attribute, or targets list is empty (possibly due to Subset).")
+                        warnings.warn("⚠️ Cannot plot full training set distribution: Underlying dataset missing 'targets' or 'classes' attribute, or targets list is empty.")
 
                     if final_val_dataset and final_test_dataset:
-                        train_set_for_analysis = final_train_dataset_full if train_ratio < 1.0 else final_train_dataset
+                        train_set_for_analysis = final_train_dataset_full
                         if hasattr(train_set_for_analysis, 'targets') and hasattr(train_set_for_analysis, 'classes'):
                             analyze_class_distribution_across_splits({
                                 'Train': train_set_for_analysis,
@@ -311,7 +311,16 @@ def main():
                         else:
                             warnings.warn("⚠️ Cannot analyze splits: Training dataset object missing 'targets' or 'classes'.")
 
-                    plot_sample_images_per_class(final_train_dataset, num_samples=min(5, current_batch_size), model_config=model_config)
+                    if train_datasets_list:
+                        first_train_ds = train_datasets_list[0]
+                        if hasattr(first_train_ds, 'classes') and first_train_ds.classes and \
+                           hasattr(first_train_ds, 'imgs') and hasattr(first_train_ds, 'loader') and hasattr(first_train_ds, 'transform'):
+                            print("   Plotting sample images from the *first* loaded training dataset.")
+                            plot_sample_images_per_class(first_train_ds, num_samples=min(5, current_batch_size), model_config=model_config)
+                        else:
+                            warnings.warn("⚠️ Cannot plot sample images: First training dataset object missing required attributes ('classes', 'imgs', 'loader', 'transform').")
+                    else:
+                         warnings.warn("⚠️ Cannot plot sample images: No training datasets loaded.")
 
                 train_loader = DataLoader(final_train_dataset, batch_size=current_batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0)
                 val_loader = DataLoader(final_val_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0) if final_val_dataset else None
