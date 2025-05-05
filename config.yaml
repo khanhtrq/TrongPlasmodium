@@ -41,7 +41,7 @@ class_names:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - mobilenetv4_hybrid_large.e600_r384_in1k
+  - mobilenet_v3
 
 # --- Training Configuration ---
 training:
@@ -49,7 +49,7 @@ training:
   patience: 20   # Early stopping patience
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
   clip_grad_norm: 0 # Max norm for gradient clipping (set to 0 or null to disable)
-  train_ratio: 0.5 # Ratio of the (combined) training set to use (1.0 = 100%, 0.1 = 10%)
+  train_ratio: 1 # Ratio of the (combined) training set to use (1.0 = 100%, 0.1 = 10%)
 
 # --- Optimizer Configuration ---
 optimizer:

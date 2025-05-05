@@ -2,7 +2,7 @@ import os
 import yaml
 import torch
 import torch.optim as optim
-from torch.utils.data import DataLoader, Subset, ConcatDataset  # Import Subset and ConcatDataset
+from torch.utils.data import DataLoader, ConcatDataset  # Import ConcatDataset
 import torch.nn as nn
 from torchvision import transforms, datasets  # Ensure datasets is imported
 import numpy as np
@@ -266,22 +266,11 @@ def main():
 
                 if len(train_datasets_list) > 1:
                     print(f"   Concatenating {len(train_datasets_list)} training datasets...")
-                    final_train_dataset_full = ConcatDataset(train_datasets_list)
-                    print(f"   Combined training set size: {len(final_train_dataset_full)}")
+                    final_train_dataset = ConcatDataset(train_datasets_list)
+                    print(f"   Combined training set size: {len(final_train_dataset)}")
                 else:
-                    final_train_dataset_full = train_datasets_list[0]
-                    print(f"   Using single training dataset (size: {len(final_train_dataset_full)})")
-
-                if train_ratio < 1.0:
-                    num_train_samples = len(final_train_dataset_full)
-                    subset_size = math.ceil(num_train_samples * train_ratio)
-                    print(f"   Applying train_ratio: {train_ratio:.2f} -> Using {subset_size}/{num_train_samples} training samples.")
-                    indices = torch.randperm(num_train_samples)[:subset_size].tolist()
-                    final_train_dataset = Subset(final_train_dataset_full, indices)
-                    if not hasattr(final_train_dataset, 'classes'): final_train_dataset.classes = final_class_names
-                else:
-                    final_train_dataset = final_train_dataset_full
-                    print(f"   Using full training set (ratio: {train_ratio:.2f}).")
+                    final_train_dataset = train_datasets_list[0]
+                    print(f"   Using single training dataset (size: {len(final_train_dataset)})")
 
                 final_val_dataset = val_datasets_list[0] if val_datasets_list else None
                 final_test_dataset = test_datasets_list[0] if test_datasets_list else None
@@ -289,15 +278,15 @@ def main():
                 print("   Datasets finalized.")
 
                 if current_batch_size == initial_batch_size:
-                    print("\n📊 Analyzing Combined Training Set Distribution (Before Ratio):")
-                    plot_class_distribution_with_ratios(final_train_dataset_full, title="Combined Training Set Class Distribution")
+                    print("\n📊 Analyzing Combined Training Set Distribution:")
+                    plot_class_distribution_with_ratios(final_train_dataset, title="Combined Training Set Class Distribution")
                     if final_val_dataset and final_test_dataset:
                         analyze_class_distribution_across_splits({
-                            'Train (Full)': final_train_dataset_full,
+                            'Train (Full)': final_train_dataset,
                             'Validation': final_val_dataset,
                             'Test': final_test_dataset
                         })
-                    plot_sample_images_per_class(final_train_dataset_full, num_samples=min(5, current_batch_size), model_config=model_config)
+                    plot_sample_images_per_class(final_train_dataset, num_samples=min(5, current_batch_size), model_config=model_config)
 
                 train_loader = DataLoader(final_train_dataset, batch_size=current_batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0)
                 val_loader = DataLoader(final_val_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0) if final_val_dataset else None
@@ -325,7 +314,7 @@ def main():
                 print(f"\n📅 LR Scheduler: {scheduler_config.get('type', 'StepLR').capitalize()}")
                 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_config.get('step_size', 7), gamma=scheduler_config.get('gamma', 0.1))
 
-                print(f"\n🏋️ Starting training for model: {model_name} (Batch Size: {current_batch_size})...")
+                print(f"\n🏋️ Starting training for model: {model_name} (Batch Size: {current_batch_size}, Train Ratio: {train_ratio:.2f})...")
                 model_save_path = os.path.join(model_results_dir, f'{model_name}_best.pth')
                 log_save_path = os.path.join(model_results_dir, f'{model_name}_training_log.csv')
 
@@ -341,7 +330,8 @@ def main():
                     use_amp=use_amp,
                     save_path=model_save_path,
                     log_path=log_save_path,
-                    clip_grad_norm=clip_grad_norm
+                    clip_grad_norm=clip_grad_norm,
+                    train_ratio=train_ratio
                 )
 
                 model_trained_successfully = True
@@ -437,3 +427,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

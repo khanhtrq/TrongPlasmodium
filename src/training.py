@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import warnings
 import torch.nn.utils as torch_utils  # For gradient clipping
+import math  # For ceiling function
+from torch.utils.data import DataLoader, SubsetRandomSampler  # Import sampler
 
 try:
     import torch_xla.core.xla_model as xm
@@ -16,7 +18,7 @@ except ImportError:
 
 def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                 num_epochs=25, patience=5, use_amp=True, save_path='best_model.pth',
-                log_path='training_log.csv', clip_grad_norm=1.0):
+                log_path='training_log.csv', clip_grad_norm=1.0, train_ratio=1.0):  # Add train_ratio
     """Trains the model, tracks history, handles early stopping, and saves the best weights."""
     since = time.time()
 
@@ -24,6 +26,10 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
     if not isinstance(clip_grad_norm, (float, int)) or clip_grad_norm <= 0:
         print(f"⚠️ Invalid clip_grad_norm value ({clip_grad_norm}). Disabling gradient clipping.")
         clip_grad_norm = None  # Disable clipping if value is invalid
+
+    if not (0.0 < train_ratio <= 1.0):
+        warnings.warn(f"⚠️ Invalid train_ratio ({train_ratio}) passed to train_model. Clamping to 1.0.")
+        train_ratio = 1.0
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_val_metric = 0.0  # Use a generic name, decided by primary metric below
@@ -47,6 +53,19 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
         'lr': []
     }
 
+    # Store original dataloader settings to recreate epoch-specific loader
+    original_train_loader = dataloaders.get('train')
+    if original_train_loader is None:
+        raise ValueError("❌ 'train' dataloader not found in dataloaders dictionary.")
+
+    full_train_dataset = original_train_loader.dataset
+    num_total_train_samples = len(full_train_dataset)
+    loader_batch_size = original_train_loader.batch_size
+    loader_num_workers = original_train_loader.num_workers
+    loader_pin_memory = original_train_loader.pin_memory
+    loader_collate_fn = original_train_loader.collate_fn
+    loader_persistent_workers = getattr(original_train_loader, 'persistent_workers', False)  # Get persistent_workers if available
+
     print(f"\n🚀 Starting Training Configuration:")
     print(f"   Model: {type(model).__name__}")
     print(f"   Epochs: {num_epochs}, Patience: {patience}")
@@ -56,6 +75,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
     print(f"   Best Model Path: {save_path}")
     print(f"   Log Path: {log_path}")
     print(f"   Primary Metric for Improvement: {primary_metric}")
+    print(f"   Train Ratio per Epoch: {train_ratio:.2f}")
     print("-" * 30)
 
     for epoch in range(num_epochs):
@@ -65,19 +85,43 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
         history['epoch'].append(epoch + 1)
         history['lr'].append(optimizer.param_groups[0]['lr'])  # Log LR at start of epoch
 
+        # --- Create Epoch-Specific Training Loader if ratio < 1.0 ---
+        if train_ratio < 1.0:
+            num_epoch_samples = math.ceil(num_total_train_samples * train_ratio)
+            epoch_indices = torch.randperm(num_total_train_samples)[:num_epoch_samples].tolist()
+            epoch_sampler = SubsetRandomSampler(epoch_indices)
+            print(f"   Sampling {num_epoch_samples}/{num_total_train_samples} training samples for this epoch.")
+            epoch_train_loader = DataLoader(
+                full_train_dataset,
+                batch_size=loader_batch_size,
+                sampler=epoch_sampler,  # Use the sampler
+                num_workers=loader_num_workers,
+                pin_memory=loader_pin_memory,
+                collate_fn=loader_collate_fn,
+                persistent_workers=loader_persistent_workers,
+                shuffle=False  # Sampler handles shuffling
+            )
+        else:
+            # Use the original loader (assuming it shuffles)
+            epoch_train_loader = original_train_loader
+            num_epoch_samples = num_total_train_samples  # Use all samples
+
         # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
             if phase == 'train':
                 model.train()  # Set model to training mode
+                current_loader = epoch_train_loader  # Use the potentially subsetted loader
+                current_dataset_size = num_epoch_samples  # Use the size of the subset for progress bar total
             else:
                 model.eval()  # Set model to evaluate mode
-                # --- Debug: Check validation dataloader before loop ---
+                if 'val' not in dataloaders:  # Skip validation if no val loader
+                    print("   Skipping validation phase: No validation dataloader provided.")
+                    continue
+                current_loader = dataloaders['val']
                 try:
-                    print(f"Debug VAL: len(dataloaders['val']) = {len(dataloaders['val'])}")
-                    print(f"Debug VAL: len(dataloaders['val'].dataset) = {len(dataloaders['val'].dataset)}")
-                except Exception as e:
-                    print(f"Debug VAL: Error getting dataloader/dataset length - {e}")
-                # --- End Debug ---
+                    current_dataset_size = len(current_loader.dataset)
+                except TypeError:
+                    current_dataset_size = 0  # Fallback if dataset has no len
 
             running_loss = 0.0
             all_preds = []
@@ -86,14 +130,11 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
             phase_start_time = time.time()
 
             # Use tqdm for progress bar
-            pbar = tqdm(dataloaders[phase], desc=f'{phase.capitalize()} Epoch {epoch+1}', leave=False, unit="batch")
+            # Adjust total based on whether it's train (subset size) or val (full size)
+            pbar_total = math.ceil(current_dataset_size / current_loader.batch_size) if current_loader.batch_size > 0 else 0
+            pbar = tqdm(current_loader, desc=f'{phase.capitalize()} Epoch {epoch+1}', total=pbar_total, leave=False, unit="batch")
 
-            for i, (inputs, labels) in enumerate(pbar):  # Use enumerate for batch index
-                # --- Debug: Check if validation loop is entered ---
-                if phase == 'val' and i == 0:
-                    print(f"Debug VAL: Entered validation loop (batch 0). inputs.shape={inputs.shape if hasattr(inputs, 'shape') else 'N/A'}, labels.shape={labels.shape if hasattr(labels, 'shape') else 'N/A'}")
-                # --- End Debug ---
-
+            for inputs, labels in pbar:
                 # Skip batch if data loading failed (indicated by empty tensors)
                 if inputs.numel() == 0 or labels.numel() == 0:
                     warnings.warn(f"Skipping empty batch in {phase} phase (epoch {epoch+1}). Check data loading.")
@@ -113,7 +154,6 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                     amp_dtype = torch.float16 if is_cuda else torch.bfloat16
                     with torch.cuda.amp.autocast(enabled=(use_amp and is_cuda), dtype=amp_dtype):
                         outputs = model(inputs)
-                        # Ensure outputs and labels are compatible with criterion
                         loss = criterion(outputs, labels)
 
                     # Check for NaN/Inf loss *before* backward pass
@@ -162,20 +202,10 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
 
             # --- Epoch End Calculation ---
             phase_duration = time.time() - phase_start_time
-            # --- Debug: Print final batch count ---
-            if phase == 'val':
-                print(f"Debug VAL: Finished validation loop. Final batch_count = {batch_count}")
-            # --- End Debug ---
-            try:
-                num_samples = len(dataloaders[phase].dataset)
-            except TypeError:  # Handle cases where dataset might not have __len__ (though unlikely for ImageFolder)
-                print(f"⚠️ Could not determine dataset size for phase '{phase}'. Using len(all_labels) if available.")
-                num_samples = len(all_labels) if len(all_labels) > 0 else 0  # Fallback
+            num_processed_samples = len(all_labels)  # Use the actual number of processed samples
 
-            if batch_count == 0 or num_samples == 0:
-                # --- Enhanced Warning ---
-                print(f"⚠️ No valid batches processed in {phase} phase for epoch {epoch+1} (batch_count={batch_count}, num_samples={num_samples}). Skipping metrics calculation.")
-                # --- End Enhanced Warning ---
+            if batch_count == 0 or num_processed_samples == 0:
+                print(f"⚠️ No valid batches processed in {phase} phase for epoch {epoch+1} (batch_count={batch_count}, processed_samples={num_processed_samples}). Skipping metrics calculation.")
                 history[f'{phase}_loss'].append(float('nan'))
                 history[f'{phase}_acc_macro'].append(float('nan'))
                 history[f'{phase}_acc_weighted'].append(float('nan'))
@@ -188,8 +218,10 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                     history['val_f1_weighted'].append(float('nan'))
                 continue
 
-            epoch_loss = running_loss / len(all_labels)
+            # Calculate loss based on processed samples
+            epoch_loss = running_loss / num_processed_samples
 
+            # Calculate metrics based on processed samples
             if len(all_preds) > 0 and len(all_labels) > 0:
                 precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(
                     all_labels, all_preds, average='macro', zero_division=0
@@ -206,6 +238,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                 precision_macro, recall_macro, f1_macro = 0.0, 0.0, 0.0
                 precision_weighted, recall_weighted, f1_weighted = 0.0, 0.0, 0.0
 
+            # Update history
             history[f'{phase}_loss'].append(epoch_loss)
             history[f'{phase}_acc_macro'].append(epoch_acc_macro_avg_per_class)
             history[f'{phase}_acc_weighted'].append(epoch_acc_weighted)
@@ -218,11 +251,13 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                 history['val_recall_weighted'].append(recall_weighted)
                 history['val_f1_weighted'].append(f1_weighted)
 
+            # Print results
             print(f'{phase.capitalize():<5} Loss: {epoch_loss:.4f} | Acc (Mac): {epoch_acc_macro_avg_per_class:.4f} | Acc (Wgt): {epoch_acc_weighted:.4f} | Time: {phase_duration:.2f}s')
             if phase == 'val':
                 print(f'      P(Mac): {precision_macro:.4f} | R(Mac): {recall_macro:.4f} | F1(Mac): {f1_macro:.4f}')
                 print(f'      P(Wgt): {precision_weighted:.4f} | R(Wgt): {recall_weighted:.4f} | F1(Wgt): {f1_weighted:.4f}')
 
+            # --- Validation Phase Specific Logic ---
             if phase == 'val':
                 # --- Correctly select the metric value based on primary_metric ---
                 if primary_metric == 'val_acc_macro':
