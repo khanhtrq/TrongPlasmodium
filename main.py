@@ -2,7 +2,7 @@ import os
 import yaml
 import torch
 import torch.optim as optim
-from torch.utils.data import DataLoader, ConcatDataset  # Import ConcatDataset
+from torch.utils.data import DataLoader, Subset, SubsetRandomSampler  # Adjusted imports
 import torch.nn as nn
 from torchvision import transforms, datasets  # Ensure datasets is imported
 import numpy as np
@@ -13,7 +13,7 @@ import pprint  # Import pprint for pretty printing
 import gc  # Import garbage collector
 import math  # For ceiling function
 
-from src.data_loader import AnnotationDataset, ImageFolderWrapper, collate_fn_skip_error  # Import ImageFolderWrapper
+from src.data_loader import AnnotationDataset, ImageFolderWrapper, CombinedDataset, collate_fn_skip_error  # Adjusted import
 from src.device_handler import get_device
 from src.model_initializer import initialize_model
 from src.training import train_model
@@ -265,12 +265,28 @@ def main():
                     warnings.warn("⚠️ No test datasets were loaded. Final evaluation will be skipped.")
 
                 if len(train_datasets_list) > 1:
-                    print(f"   Concatenating {len(train_datasets_list)} training datasets...")
-                    final_train_dataset = ConcatDataset(train_datasets_list)
-                    print(f"   Combined training set size: {len(final_train_dataset)}")
+                    print(f"   Combining {len(train_datasets_list)} training datasets using CombinedDataset wrapper...")
+                    try:
+                        final_train_dataset_full = CombinedDataset(train_datasets_list)  # Use CombinedDataset here
+                    except (AttributeError, ValueError) as e:
+                        print(f"❌ Error creating CombinedDataset: {e}. Check dataset attributes ('classes', 'targets').")
+                        raise e  # Halt if combination fails
+                    print(f"   Combined training set size: {len(final_train_dataset_full)}")
                 else:
-                    final_train_dataset = train_datasets_list[0]
-                    print(f"   Using single training dataset (size: {len(final_train_dataset)})")
+                    final_train_dataset_full = train_datasets_list[0]
+                    print(f"   Using single training dataset (size: {len(final_train_dataset_full)})")
+
+                if train_ratio < 1.0:
+                    subset_size = math.ceil(len(final_train_dataset_full) * train_ratio)
+                    indices = list(range(subset_size))
+                    final_train_dataset = Subset(final_train_dataset_full, indices)
+                    if not hasattr(final_train_dataset, 'classes'): final_train_dataset.classes = final_class_names
+                    if not hasattr(final_train_dataset, 'targets'):
+                        warnings.warn("Cannot easily get 'targets' from Subset for analysis when train_ratio < 1.0.")
+                        final_train_dataset.targets = []
+                else:
+                    final_train_dataset = final_train_dataset_full
+                    print(f"   Using full training set (ratio: {train_ratio:.2f}).")
 
                 final_val_dataset = val_datasets_list[0] if val_datasets_list else None
                 final_test_dataset = test_datasets_list[0] if test_datasets_list else None
@@ -278,14 +294,23 @@ def main():
                 print("   Datasets finalized.")
 
                 if current_batch_size == initial_batch_size:
-                    print("\n📊 Analyzing Combined Training Set Distribution:")
-                    plot_class_distribution_with_ratios(final_train_dataset, title="Combined Training Set Class Distribution")
+                    print("\n📊 Analyzing Final Training Set Distribution:")
+                    if hasattr(final_train_dataset, 'targets') and hasattr(final_train_dataset, 'classes') and final_train_dataset.targets:
+                        plot_class_distribution_with_ratios(final_train_dataset, title="Final Training Set Class Distribution")
+                    else:
+                        warnings.warn("⚠️ Cannot plot training set distribution: Final training dataset missing 'targets' or 'classes' attribute, or targets list is empty (possibly due to Subset).")
+
                     if final_val_dataset and final_test_dataset:
-                        analyze_class_distribution_across_splits({
-                            'Train (Full)': final_train_dataset,
-                            'Validation': final_val_dataset,
-                            'Test': final_test_dataset
-                        })
+                        train_set_for_analysis = final_train_dataset_full if train_ratio < 1.0 else final_train_dataset
+                        if hasattr(train_set_for_analysis, 'targets') and hasattr(train_set_for_analysis, 'classes'):
+                            analyze_class_distribution_across_splits({
+                                'Train': train_set_for_analysis,
+                                'Validation': final_val_dataset,
+                                'Test': final_test_dataset
+                            })
+                        else:
+                            warnings.warn("⚠️ Cannot analyze splits: Training dataset object missing 'targets' or 'classes'.")
+
                     plot_sample_images_per_class(final_train_dataset, num_samples=min(5, current_batch_size), model_config=model_config)
 
                 train_loader = DataLoader(final_train_dataset, batch_size=current_batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0)

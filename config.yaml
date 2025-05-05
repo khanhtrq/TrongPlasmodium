@@ -3,21 +3,22 @@ data_dir: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Ja
 
 # --- Datasets Configuration (List) ---
 datasets:
+  - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
+    annotation_train: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/train_annotation.txt'
+    annotation_val: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/val_annotation.txt' # Use original val
+    annotation_test: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/test_annotation.txt' # Use original test
+    annotation_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
+
   - type: 'annotation' # First dataset definition (e.g., SMOTE for training)
     # Settings for 'annotation' type
     annotation_train: '/kaggle/input/datn-smote/smote_synthesized_output/synthesized_annotations.txt'
-    annotation_val: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/val_annotation.txt' # Use original val
-    annotation_test: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/test_annotation.txt' # Use original test
+    annotation_val: null # Use original val
+    annotation_test: null # Use original test
     annotation_root: '/kaggle/input/datn-smote/smote_synthesized_output' # Root for THIS dataset's images
     # If val/test annotations use different root, specify explicitly or adjust AnnotationDataset
     # annotation_val_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
     # annotation_test_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
 
-  - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
-    annotation_train: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/train_annotation.txt'
-    annotation_val: null # Can be null if val/test are taken from the first dataset
-    annotation_test: null
-    annotation_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
 
   # - type: 'imagefolder' # Optional: Example ImageFolder definition
   #   imagefolder_root: '/path/to/cifar10_like_data'

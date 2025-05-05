@@ -1,6 +1,6 @@
 import os
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, ConcatDataset # Import ConcatDataset
 from PIL import Image
 from torchvision import transforms, datasets # Import datasets
 import numpy as np
@@ -184,6 +184,58 @@ class ImageFolderWrapper(datasets.ImageFolder):
             print(f"   Target labels range: [{min_target}, {max_target}]")
 
     # __getitem__ and __len__ are inherited from ImageFolder
+
+# --- New Combined Dataset Wrapper ---
+class CombinedDataset(Dataset):
+    """
+    Wraps ConcatDataset to provide combined 'targets' and 'classes' attributes
+    for compatibility with analysis and visualization functions.
+    """
+    def __init__(self, datasets):
+        if not datasets:
+            raise ValueError("Cannot create CombinedDataset from an empty list of datasets.")
+
+        self.concat_dataset = ConcatDataset(datasets)
+        self.datasets = datasets
+
+        # --- Combine classes and targets ---
+        first_dataset = datasets[0]
+        if not hasattr(first_dataset, 'classes'):
+            raise AttributeError("The first dataset in the list must have a 'classes' attribute.")
+        self.classes = first_dataset.classes
+        print(f"   CombinedDataset using classes from first dataset: {self.classes}")
+
+        all_targets = []
+        for i, ds in enumerate(datasets):
+            if not hasattr(ds, 'classes') or ds.classes != self.classes:
+                warnings.warn(f"Dataset {i} has missing or inconsistent 'classes' attribute. Skipping its targets.")
+                continue # Or raise error if strict consistency is needed
+            if hasattr(ds, 'targets'):
+                all_targets.extend(ds.targets)
+            else:
+                warnings.warn(f"Dataset {i} is missing 'targets' attribute. Cannot combine targets.")
+                # If targets are essential, raise an error here instead
+                self.targets = [] # Mark targets as unavailable
+                break
+        else: # Only runs if the loop completes without break
+             self.targets = all_targets
+             print(f"   CombinedDataset combined targets count: {len(self.targets)}")
+
+        # --- Add other compatibility attributes (optional, may need refinement) ---
+        # Use attributes from the first dataset as representative
+        if hasattr(first_dataset, 'imgs'):
+            # Note: This 'imgs' won't directly map to indices in the combined dataset easily.
+            # It's mainly for functions that might expect the attribute to exist.
+            self.imgs = first_dataset.imgs
+        if hasattr(first_dataset, 'loader'):
+            self.loader = first_dataset.loader
+
+
+    def __len__(self):
+        return len(self.concat_dataset)
+
+    def __getitem__(self, idx):
+        return self.concat_dataset[idx]
 
 # Example of a collate function to handle None values from __getitem__
 def collate_fn_skip_error(batch):
