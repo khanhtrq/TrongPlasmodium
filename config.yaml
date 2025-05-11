@@ -22,7 +22,7 @@ datasets:
 
   - type: 'imagefolder' # Optional: Example ImageFolder definition
     imagefolder_root: '/kaggle/input/bbbc041/dataset_resplit'
-    imagefolder_train_subdir: null
+    imagefolder_train_subdir: 'train1'
     imagefolder_val_subdir: 'val'
     imagefolder_test_subdir: 'test'
 
