@@ -29,15 +29,23 @@ datasets:
 batch_size: 32
 num_workers: 4 # Adjusted based on typical Kaggle limits
 
+# # --- Class Configuration ---
+# class_names:
+#   - "Ring"
+#   - "Trophozoite"
+#   - "Schizont"
+#   - "Gametocyte" # Corrected spelling
+#   - "Healthy RBC"
+#   - "Other"
 # --- Class Configuration ---
 class_names:
-  - "Ring"
-  - "Trophozoite"
-  - "Schizont"
-  - "Gametocyte" # Corrected spelling
-  - "Healthy RBC"
-  - "Other"
-
+  - "difficult"
+  - "gametocyte"
+  - "leukocyte"
+  - "red blood cell"
+  - "ring"
+  - "schizont"
+  - "trophozoite"
 # --- Model Configuration ---
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
