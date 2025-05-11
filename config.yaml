@@ -9,20 +9,20 @@ datasets:
   #   annotation_test: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/test_annotation.txt' # Use original test
   #   annotation_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
 
-  # - type: 'annotation' # First dataset definition (e.g., SMOTE for training)
-  #   # Settings for 'annotation' type
-  #   annotation_train: '/kaggle/input/datn-smote/smote_synthesized_output/synthesized_annotations.txt'
-  #   annotation_val: null # Use original val
-  #   annotation_test: null # Use original test
-  #   annotation_root: '/kaggle/input/datn-smote/smote_synthesized_output' # Root for THIS dataset's images
-  #   # If val/test annotations use different root, specify explicitly or adjust AnnotationDataset
-  #   # annotation_val_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
-  #   # annotation_test_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
+  - type: 'annotation' # First dataset definition (e.g., SMOTE for training)
+    # Settings for 'annotation' type
+    annotation_train: '/kaggle/input/datn-smote/smote_custom_strategy_output_structured/smote_annotations.txt'
+    annotation_val: null # Use original val
+    annotation_test: null # Use original test
+    annotation_root: '/kaggle/input/datn-smote/smote_custom_strategy_output_structured' # Root for THIS dataset's images
+    # If val/test annotations use different root, specify explicitly or adjust AnnotationDataset
+    # annotation_val_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
+    # annotation_test_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
 
 
   - type: 'imagefolder' # Optional: Example ImageFolder definition
     imagefolder_root: '/kaggle/input/bbbc041/dataset_resplit'
-    imagefolder_train_subdir: 'train'
+    imagefolder_train_subdir: null
     imagefolder_val_subdir: 'val'
     imagefolder_test_subdir: 'test'
 
