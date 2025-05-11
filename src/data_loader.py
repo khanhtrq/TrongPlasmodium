@@ -34,15 +34,28 @@ class AnnotationDataset(Dataset):
             raise FileNotFoundError(f"❌ Annotation file not found: {annotation_file}")
 
         for i, line in enumerate(lines):
-            parts = line.strip().split()
-            if len(parts) != 2:
-                warnings.warn(f"⚠️ Skipping malformed line {i+1} in {annotation_file}: '{line.strip()}'")
+            stripped_line = line.strip()
+            if not stripped_line: # Skip empty lines
                 continue
-            path, label_str = parts
+
+            parts = stripped_line.split()
+            
+            if len(parts) < 2: # Must have at least a path-like part and a label part
+                warnings.warn(f"⚠️ Skipping malformed line {i+1} in {annotation_file} (expected path and label): '{stripped_line}'")
+                continue
+            
+            # Assume the last part is the label, everything else is the path
+            label_str = parts[-1]
+            path = " ".join(parts[:-1])
+
+            if not path: # Handle cases where path might become empty if line was just " label"
+                warnings.warn(f"⚠️ Skipping line {i+1} with missing path in {annotation_file}: '{stripped_line}'")
+                continue
+
             try:
                 label = int(label_str)
             except ValueError:
-                warnings.warn(f"⚠️ Skipping line {i+1} with non-integer label in {annotation_file}: '{line.strip()}'")
+                warnings.warn(f"⚠️ Skipping line {i+1} with non-integer label ('{label_str}') in {annotation_file}: '{stripped_line}'")
                 continue
 
             full_path = os.path.join(self.root_dir, path)
