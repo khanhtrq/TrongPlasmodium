@@ -208,20 +208,40 @@ def main():
                         elif dataset_type == 'imagefolder':
                             imgf_root = d_cfg.get('imagefolder_root')
                             if not imgf_root: raise ValueError(f"Source {i+1}: 'imagefolder_root' is required for type 'imagefolder'.")
-                            imgf_train_subdir = d_cfg.get('imagefolder_train_subdir', 'train')
-                            imgf_val_subdir = d_cfg.get('imagefolder_val_subdir', 'val')
-                            imgf_test_subdir = d_cfg.get('imagefolder_test_subdir', 'test')
+                            
+                            imgf_train_subdir = d_cfg.get('imagefolder_train_subdir') # Get value, could be None
+                            imgf_val_subdir = d_cfg.get('imagefolder_val_subdir')   # Get value, could be None
+                            imgf_test_subdir = d_cfg.get('imagefolder_test_subdir')  # Get value, could be None
 
-                            train_dir = os.path.join(imgf_root, imgf_train_subdir)
-                            val_dir = os.path.join(imgf_root, imgf_val_subdir)
-                            test_dir = os.path.join(imgf_root, imgf_test_subdir)
+                            if imgf_train_subdir: # Only proceed if subdir is not None
+                                train_dir = os.path.join(imgf_root, imgf_train_subdir)
+                                if os.path.isdir(train_dir):
+                                    current_train_dataset = ImageFolderWrapper(root=train_dir, transform=transform_train)
+                                    print(f"     Loaded ImageFolder train from: {train_dir}")
+                                else:
+                                    warnings.warn(f"     ImageFolder train directory not found: {train_dir} (from source {i+1})")
+                            else:
+                                print(f"     Skipping ImageFolder train for source {i+1} as subdir is null.")
 
-                            if os.path.isdir(train_dir):
-                                current_train_dataset = ImageFolderWrapper(root=train_dir, transform=transform_train)
-                            if os.path.isdir(val_dir):
-                                current_val_dataset = ImageFolderWrapper(root=val_dir, transform=transform_eval)
-                            if os.path.isdir(test_dir):
-                                current_test_dataset = ImageFolderWrapper(root=test_dir, transform=transform_eval)
+                            if imgf_val_subdir: # Only proceed if subdir is not None
+                                val_dir = os.path.join(imgf_root, imgf_val_subdir)
+                                if os.path.isdir(val_dir):
+                                    current_val_dataset = ImageFolderWrapper(root=val_dir, transform=transform_eval)
+                                    print(f"     Loaded ImageFolder val from: {val_dir}")
+                                else:
+                                    warnings.warn(f"     ImageFolder val directory not found: {val_dir} (from source {i+1})")
+                            else:
+                                print(f"     Skipping ImageFolder val for source {i+1} as subdir is null.")
+
+                            if imgf_test_subdir: # Only proceed if subdir is not None
+                                test_dir = os.path.join(imgf_root, imgf_test_subdir)
+                                if os.path.isdir(test_dir):
+                                    current_test_dataset = ImageFolderWrapper(root=test_dir, transform=transform_eval)
+                                    print(f"     Loaded ImageFolder test from: {test_dir}")
+                                else:
+                                    warnings.warn(f"     ImageFolder test directory not found: {test_dir} (from source {i+1})")
+                            else:
+                                print(f"     Skipping ImageFolder test for source {i+1} as subdir is null.")
                         else:
                             raise ValueError(f"Source {i+1}: Invalid dataset_type '{dataset_type}'.")
 
@@ -461,4 +481,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
