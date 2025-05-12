@@ -373,7 +373,7 @@ def main():
                     config.get('criterion', 'CrossEntropyLoss'),
                     num_classes=num_classes,
                     device=device,
-                    criterion_params=optimizer_config.get('criterion_params', {})
+                    criterion_params=config.get('criterion_params', {})
                 )
 
                 print(f"\n📅 LR Scheduler: {scheduler_config.get('type', 'StepLR').capitalize()}")
