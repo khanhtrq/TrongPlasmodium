@@ -14,7 +14,7 @@ import gc  # Import garbage collector
 import math  # For ceiling function
 
 from src.data_loader import AnnotationDataset, ImageFolderWrapper, CombinedDataset, collate_fn_skip_error  # Adjusted import
-from src.device_handler import get_device
+from src.device_handler import get_device, setup_model_for_training  # MODIFIED: Import setup_model_for_training
 from src.model_initializer import initialize_model
 from src.training import train_model
 from src.evaluation import infer_from_annotation, report_classification
@@ -350,7 +350,13 @@ def main():
                 dataloaders = {'train': train_loader}
                 if val_loader: dataloaders['val'] = val_loader
 
-                model = model.to(device)
+                # --- Setup Model for Training Device(s) ---
+                model, device_actual = setup_model_for_training(  # MODIFIED: Use setup_model_for_training
+                    model,
+                    use_cuda=device_config.get('use_cuda', True),
+                    multi_gpu=device_config.get('multi_gpu', True)
+                )
+                print(f"   Model is now on device: {device_actual}")
 
                 params_to_update = model.parameters()
                 if config.get('feature_extract', False):

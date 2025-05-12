@@ -27,7 +27,7 @@ datasets:
     imagefolder_test_subdir: 'test'
 
 batch_size: 128
-num_workers: 8 # Adjusted based on typical Kaggle limits
+num_workers: 4 # Adjusted based on typical Kaggle limits
 
 # # --- Class Configuration ---
 # class_names:
@@ -77,7 +77,7 @@ scheduler:
 criterion: FocalLoss
 criterion_params: # Parameters specific to the criterion
   # For FocalLoss:
-  gamma: 2.0
+  gamma: 1.5
   reduction: 'mean'
   # For F1Loss:
   # beta: 1.0
