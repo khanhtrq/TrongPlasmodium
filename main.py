@@ -19,7 +19,7 @@ from src.model_initializer import initialize_model
 from src.training import train_model
 from src.evaluation import infer_from_annotation, report_classification
 from src.gradcam import generate_and_save_gradcam_per_class
-from src.loss import FocalLoss, F1Loss, compute_class_weights
+from src.loss import FocalLoss, F1Loss, compute_class_weights, get_criterion
 from src.visualization import (
     plot_sample_images_per_class,
     plot_training_curves,
@@ -369,7 +369,12 @@ def main():
                 optimizer = optim.Adam(params_to_update, lr=learning_rate)
 
                 print(f"\n📉 Criterion: {config.get('criterion', 'CrossEntropyLoss').capitalize()}")
-                criterion = nn.CrossEntropyLoss().to(device)
+                criterion = get_criterion(
+                    config.get('criterion', 'CrossEntropyLoss'),
+                    num_classes=num_classes,
+                    device=device,
+                    criterion_params=optimizer_config.get('criterion_params', {})
+                )
 
                 print(f"\n📅 LR Scheduler: {scheduler_config.get('type', 'StepLR').capitalize()}")
                 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_config.get('step_size', 7), gamma=scheduler_config.get('gamma', 0.1))

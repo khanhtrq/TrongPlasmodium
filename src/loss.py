@@ -100,3 +100,31 @@ class F1Loss(nn.Module):
         # Note: Reduction parameter isn't explicitly used here as we default to macro average loss.
         # You could adapt this part if 'sum' or element-wise loss is needed.
         return f1_loss
+    
+def get_criterion(criterion, num_classes, device, criterion_params=None):
+    criterion = criterion.lower() if isinstance(criterion, str) else criterion
+    criterion_params = criterion_params or {}
+
+    if criterion == 'focalloss':
+        # Allow passing alpha, gamma, reduction
+        return FocalLoss(
+            alpha=criterion_params.get('alpha', 1.0),
+            gamma=criterion_params.get('gamma', 2.0),
+            reduction=criterion_params.get('reduction', 'mean')
+        ).to(device)
+    elif criterion == 'f1loss':
+        # Allow passing beta, epsilon, reduction
+        return F1Loss(
+            num_classes=num_classes,
+            epsilon=criterion_params.get('epsilon', 1e-7),
+            beta=criterion_params.get('beta', 1.0),
+            reduction=criterion_params.get('reduction', 'mean')
+        ).to(device)
+    else:
+        # For CrossEntropyLoss, allow passing weight, reduction, etc.
+        ce_kwargs = {}
+        if 'weight' in criterion_params:
+            ce_kwargs['weight'] = criterion_params['weight']
+        if 'reduction' in criterion_params:
+            ce_kwargs['reduction'] = criterion_params['reduction']
+        return nn.CrossEntropyLoss(**ce_kwargs).to(device)
