@@ -26,8 +26,8 @@ datasets:
     imagefolder_val_subdir: 'val'
     imagefolder_test_subdir: 'test'
 
-batch_size: 64
-num_workers: 4 # Adjusted based on typical Kaggle limits
+batch_size: 128
+num_workers: 8 # Adjusted based on typical Kaggle limits
 
 # # --- Class Configuration ---
 # class_names:
@@ -50,7 +50,7 @@ class_names:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - mobilenetv4_conv_small.e2400_r224_in1k
+  - mobilenetv3_small_100.lamb_in1k
 
 # --- Training Configuration ---
 training:
