@@ -74,11 +74,11 @@ scheduler:
   eta_min: 1e-6 # For CosineAnnealingLR: Minimum learning rate
 
 # --- Loss Function (Criterion) Configuration ---
-criterion: CrossEntropyLoss # Options: CrossEntropyLoss, FocalLoss, F1Loss
+criterion: FocalLoss
 criterion_params: # Parameters specific to the criterion
   # For FocalLoss:
-  # gamma: 2.0
-  # reduction: 'mean'
+  gamma: 2.0
+  reduction: 'mean'
   # For F1Loss:
   # beta: 1.0
   # epsilon: 1e-7
