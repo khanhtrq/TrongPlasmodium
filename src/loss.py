@@ -104,7 +104,7 @@ class F1Loss(nn.Module):
 def get_criterion(criterion, num_classes, device, criterion_params=None):
     criterion = criterion.lower() if isinstance(criterion, str) else criterion
     criterion_params = criterion_params or {}
-
+    print(f"Using criterion: {criterion} with params: {criterion_params}")
     if criterion == 'focalloss':
         # Allow passing alpha, gamma, reduction
         return FocalLoss(
