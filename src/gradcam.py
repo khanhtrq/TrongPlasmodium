@@ -60,69 +60,143 @@ def get_one_image_per_class(dataset):
 
 # --- Automatic Target Layer Finder ---
 def find_target_layer(model):
-    """Attempts to find a suitable final convolutional or attention block layer for GradCAM."""
+    """
+    Attempts to find a suitable final convolutional or attention block layer for GradCAM.
+    Prints the last few layers of the model for diagnostic purposes.
+    """
+    print("🔍 Diagnosing model structure for GradCAM target layer selection...")
+    all_modules = list(model.named_modules())
+
+    if not all_modules:
+        print("⚠️ Model has no named modules.")
+    else:
+        # Determine how many layers to print (e.g., last 5, or fewer if model is small)
+        num_layers_to_print = min(len(all_modules), 5)
+        print(f"   Last {num_layers_to_print} named modules (name: type):")
+        # Iterate from the end of the list for the last N modules
+        for i in range(len(all_modules) - num_layers_to_print, len(all_modules)):
+            name, module = all_modules[i]
+            print(f"     - {name}: {type(module).__name__}")
+
+        # Provide context about typical GradCAM targets
+        if len(all_modules) > 1: # Ensure there's at least one module to point to
+            # The "last layer" is often the classifier itself (e.g., model.fc).
+            # GradCAM usually targets a layer *before* this.
+            print(f"   Note: The final module is often the full model ('{all_modules[-1][0]}').")
+            if len(all_modules) > 2:
+                 print(f"   The layer before that might be the classifier (e.g., '{all_modules[-2][0]}': {type(all_modules[-2][1]).__name__}).")
+            print(f"   GradCAM typically targets a convolutional or attention layer *before* global pooling/classification.")
+    print("-" * 30) # Separator
+
     target_layer = None
+    print("🤖 Attempting to automatically find target layer for GradCAM using common heuristics...")
 
     # 1. Check for common timm model structures (Vision Transformers, ConvNeXt, etc.)
-    if hasattr(model, 'blocks') and isinstance(model.blocks, nn.Sequential) and len(model.blocks) > 0:
-        # Try the norm layer of the last block (common in ViT-like models)
-        last_block = model.blocks[-1]
-        if hasattr(last_block, 'norm1'):
-            target_layer = last_block.norm1
-            print(f"🎯 Found target layer: Last block's norm1")
-        elif hasattr(last_block, 'norm'): # Some blocks might just have 'norm'
-             target_layer = last_block.norm
-             print(f"🎯 Found target layer: Last block's norm")
-        else: # Fallback to the last block itself if no norm layer found
-            target_layer = last_block
-            print(f"🎯 Found target layer: Last block of 'blocks'")
+    #    These often have a `blocks` attribute which is a Sequential or ModuleList.
+    #    The target is usually the normalization layer of the last block or the last block itself.
+    if hasattr(model, 'blocks') and isinstance(model.blocks, (nn.Sequential, nn.ModuleList)) and len(model.blocks) > 0:
+        last_block_candidate = model.blocks[-1]
+        if hasattr(last_block_candidate, 'norm1') and isinstance(last_block_candidate.norm1, nn.Module):
+            target_layer = last_block_candidate.norm1
+            print(f"🎯 Heuristic 1a: Selected last block's 'norm1' ({type(target_layer).__name__}).")
+        elif hasattr(last_block_candidate, 'norm') and isinstance(last_block_candidate.norm, nn.Module): # Common in Swin, ViT
+            target_layer = last_block_candidate.norm
+            print(f"🎯 Heuristic 1b: Selected last block's 'norm' ({type(target_layer).__name__}).")
+        else: # Fallback to the last block itself if no specific norm layer found
+            target_layer = last_block_candidate
+            print(f"🎯 Heuristic 1c: Selected last block in 'blocks' ({type(target_layer).__name__}).")
 
-    # 2. Check for ResNet-like structures (layer4)
+    # 2. Check for ResNet-like structures (e.g., 'layer4')
+    #    The last block of the last stage is a common target.
     elif hasattr(model, 'layer4') and isinstance(model.layer4, nn.Sequential) and len(model.layer4) > 0:
-        # Use the last block/module within layer4
-        target_layer = model.layer4[-1]
-        print(f"🎯 Found target layer: Last module in 'layer4'")
+        target_layer = model.layer4[-1] # This is typically the last Bottleneck or BasicBlock
+        print(f"🎯 Heuristic 2: Selected last module in 'layer4' ({type(target_layer).__name__}).")
 
-    # 3. Check for DenseNet-like structures (features.denseblock)
-    elif hasattr(model, 'features') and hasattr(model.features, 'denseblock4'): # Specific to DenseNet
-        target_layer = model.features.denseblock4
-        print(f"🎯 Found target layer: 'features.denseblock4'")
-    elif hasattr(model, 'features') and isinstance(model.features, nn.Sequential) and len(model.features) > 0:
-         # Use the last module in features (often a Conv layer or BatchNorm)
-         target_layer = model.features[-1]
-         print(f"🎯 Found target layer: Last module in 'features'")
+    # 3. Check for DenseNet-like structures (e.g., 'features.denseblock4' or last part of 'features')
+    #    The last dense block or the final normalization/convolution in the 'features' section.
+    elif hasattr(model, 'features'):
+        if hasattr(model.features, 'denseblock4') and isinstance(model.features.denseblock4, nn.Module): # DenseNet specific
+            target_layer = model.features.denseblock4
+            print(f"🎯 Heuristic 3a (DenseNet): Selected 'features.denseblock4' ({type(target_layer).__name__}).")
+        elif hasattr(model.features, 'norm5') and isinstance(model.features.norm5, nn.Module): # E.g. ConvNeXt final norm
+            target_layer = model.features.norm5
+            print(f"🎯 Heuristic 3b (ConvNeXt-like): Selected 'features.norm5' ({type(target_layer).__name__}).")
+        elif isinstance(model.features, nn.Sequential) and len(model.features) > 0:
+            # Use the last module in features, but be wary if it's a pooling layer
+            candidate_feature_layer = model.features[-1]
+            if isinstance(candidate_feature_layer, (nn.AdaptiveAvgPool2d, nn.AvgPool2d, nn.MaxPool2d, nn.AdaptiveMaxPool2d)):
+                print(f"⚠️ Heuristic 3c: 'features[-1]' is a pooling layer ({type(candidate_feature_layer).__name__}). Skipping, will try other heuristics or fallback.")
+                # target_layer remains None, allowing fallback
+            else:
+                target_layer = candidate_feature_layer
+                print(f"🎯 Heuristic 3c: Selected last module in 'features' ({type(target_layer).__name__}).")
+        else:
+            print(f"⚠️ Heuristic 3: 'features' attribute found but not a recognized structure or is empty.")
 
-    # 4. Check for EfficientNet/MobileNetV3 style 'conv_head' or final blocks
-    elif hasattr(model, 'conv_head'):
-        target_layer = model.conv_head
-        print(f"🎯 Found target layer: 'conv_head'")
-    elif hasattr(model, 'blocks') and isinstance(model.blocks, nn.ModuleList) and len(model.blocks) > 0:
-         # For MobileNetV3/EfficientNetV2 where blocks are ModuleList
-         target_layer = model.blocks[-1] # Use the last stage/block sequence
-         print(f"🎯 Found target layer: Last item in 'blocks' (ModuleList)")
+    # 4. Check for EfficientNet/MobileNetV2/V3 style 'conv_head' or if 'blocks' is a ModuleList (and not caught by Heuristic 1)
+    #    These models often have a 'conv_head' or a final convolutional layer before pooling/classifier.
+    if target_layer is None: # Only proceed if no layer found yet
+        if hasattr(model, 'conv_head') and isinstance(model.conv_head, nn.Module):
+            target_layer = model.conv_head
+            print(f"🎯 Heuristic 4a: Selected 'conv_head' ({type(target_layer).__name__}).")
+        # This case for ModuleList 'blocks' is mostly covered by Heuristic 1 if 'blocks' is the primary feature extractor.
+        # However, some models might have 'blocks' as ModuleList and also a 'conv_head', where 'conv_head' might be preferred.
+        # If Heuristic 1 picked model.blocks[-1] from a ModuleList, that's often fine.
+        # This specific check is from the original selection, kept for completeness if conv_head wasn't found.
+        elif hasattr(model, 'blocks') and isinstance(model.blocks, nn.ModuleList) and len(model.blocks) > 0:
+            # This implies Heuristic 1 didn't apply (e.g., model.blocks was ModuleList but sub-conditions of 1a/1b failed)
+            # or Heuristic 1 is not designed for ModuleList directly (though my version handles it).
+            # The original selection had this as a separate `elif`.
+            target_layer = model.blocks[-1] # Use the last stage/block sequence
+            print(f"🎯 Heuristic 4b: Selected last item in 'blocks' (ModuleList) ({type(target_layer).__name__}).")
 
 
-    # 5. Generic Fallback: Find the last Conv2d layer
+    # 5. Generic Fallback: Find the last Conv2d layer in the model
+    #    This is a general approach if specific structures aren't matched or preferred layers were unsuitable (e.g. pooling).
     if target_layer is None:
-        print("⏳ Target layer not found via common structures, searching for last Conv2d...")
+        print("⏳ No specific heuristic matched or previous choice was unsuitable. Searching for the last nn.Conv2d layer...")
+        last_conv_module = None
         last_conv_name = None
+        # Iterate through all named modules to find the last Conv2d
+        # This is a robust fallback.
         for name, module in model.named_modules():
             if isinstance(module, nn.Conv2d):
-                last_conv_name = name
+                last_conv_module = module
+                last_conv_name = name # Keep track of the name for logging
 
-        if last_conv_name:
-            # Need to get the actual module object from the name
-            try:
-                target_layer = dict(model.named_modules())[last_conv_name]
-                print(f"🎯 Found target layer: Last Conv2d layer named '{last_conv_name}'")
-            except KeyError:
-                 print(f"❌ Error accessing module '{last_conv_name}' by name.")
-                 target_layer = None
+        if last_conv_module is not None:
+            target_layer = last_conv_module
+            print(f"🎯 Heuristic 5 (Fallback): Selected last nn.Conv2d layer found: '{last_conv_name}' ({type(target_layer).__name__}).")
         else:
-            print("❌ Could not find any Conv2d layer as a fallback.")
+            print("❌ Heuristic 5 (Fallback): Could not find any nn.Conv2d layer in the model.")
+
+    # 6. Final Check: If 'features' exists and is non-empty, and target_layer is STILL None,
+    #    take the last module of 'features' as an absolute last resort before failing.
+    #    This might happen if 'features' ends in a non-conv, non-pooling layer that was skipped by 3c,
+    #    and no other Conv2d was found by fallback 5.
+    if target_layer is None and hasattr(model, 'features') and isinstance(model.features, nn.Sequential) and len(model.features) > 0:
+        target_layer = model.features[-1]
+        print(f"🎯 Heuristic 6 (Final Resort): Selected last module in 'features': '{type(target_layer).__name__}'.")
+
 
     if target_layer is None:
-        raise ValueError("❌ Could not automatically find a suitable target layer for GradCAM in this model architecture.")
+        print("❌ Critical: Could not automatically identify a suitable target layer for GradCAM after all heuristics.")
+        print("   Please review the model structure printed above and consider manually specifying the target layer.")
+        # Listing all modules again might be too verbose if already done, but can be helpful.
+        # print("\n   Full model structure (name: type):")
+        # for name, module in all_modules:
+        #     print(f"     - {name}: {type(module).__name__}")
+        raise ValueError("Failed to automatically find a suitable target layer for GradCAM. Review model structure and logs.")
+
+    # Confirm the selected layer and its (approximate) name
+    selected_layer_name = "N/A (module might be dynamically created or not directly named if part of a Sequential)"
+    for name, mod in model.named_modules():
+        if mod is target_layer: # Check for object identity
+            selected_layer_name = name
+            break
+    print("-" * 30)
+    print(f"✅ Final Target Layer for GradCAM: '{selected_layer_name}' (Type: {type(target_layer).__name__})")
+    print("-" * 30)
 
     return target_layer
 

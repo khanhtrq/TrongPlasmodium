@@ -50,7 +50,7 @@ class_names:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - mobilenetv3_small_100.lamb_in1k
+  - mobilenetv3_large_100.miil_in21k_ft_in1k
 
 # --- Training Configuration ---
 training:
@@ -74,11 +74,11 @@ scheduler:
   eta_min: 1e-6 # For CosineAnnealingLR: Minimum learning rate
 
 # --- Loss Function (Criterion) Configuration ---
-criterion: FocalLoss
+criterion: CrossEntropyLoss
 criterion_params: # Parameters specific to the criterion
   # For FocalLoss:
-  gamma: 2.0
-  reduction: 'mean'
+  # gamma: 2.0
+  # reduction: 'mean'
   # For F1Loss:
   # beta: 1.0
   # epsilon: 1e-7
