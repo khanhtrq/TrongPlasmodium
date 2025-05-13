@@ -74,14 +74,14 @@ scheduler:
   eta_min: 1e-6 # For CosineAnnealingLR: Minimum learning rate
 
 # --- Loss Function (Criterion) Configuration ---
-criterion: F1Loss
+criterion: gmhc
 criterion_params: # Parameters specific to the criterion
   # For FocalLoss:
   # gamma: 3
   # reduction: 'mean'
-  For F1Loss:
-  beta: 1.0
-  epsilon: 1e-7
+  # For F1Loss:
+  # beta: 1.0
+  # epsilon: 1e-7
   # For CrossEntropyLoss:
   use_class_weights: false # Set to true to compute and use class weights
 
