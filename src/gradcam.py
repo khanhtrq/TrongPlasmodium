@@ -65,7 +65,13 @@ def find_target_layer(model):
     Prints the last few layers of the model for diagnostic purposes.
     """
     print("🔍 Diagnosing model structure for GradCAM target layer selection...")
+
+    # Print the full model structure before any heuristics
+    print("📦 Full model structure (name: type):")
     all_modules = list(model.named_modules())
+    for name, module in all_modules:
+        print(f"     - {name}: {type(module).__name__}")
+    print("-" * 30) # Separator
 
     if not all_modules:
         print("⚠️ Model has no named modules.")

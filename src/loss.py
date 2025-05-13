@@ -5,11 +5,12 @@ from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=1.0, gamma=2.0, reduction='mean'):
+    def __init__(self, alpha=1.0, gamma=2.0, reduction='mean', eps=1e-8):
         super(FocalLoss, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
+        self.eps = eps  # Add a small epsilon for safety
 
     def forward(self, inputs, targets):
         logpt = F.log_softmax(inputs, dim=1)
@@ -17,16 +18,19 @@ class FocalLoss(nn.Module):
         logpt = logpt.gather(1, targets.unsqueeze(1)).squeeze(1)
         pt = pt.gather(1, targets.unsqueeze(1)).squeeze(1)
         
+        # Clamp pt to avoid NaN when gamma < 1
+        pt = pt.clamp(min=self.eps, max=1.0 - self.eps)
+
         if self.alpha is not None:
             try:
                 at = self.alpha.gather(0, targets)
-            except:
+            except Exception:
                 at = 1.0
         else:
             at = 1.0
-    
+
         loss = -at * (1 - pt) ** self.gamma * logpt
-    
+
         if self.reduction == 'mean':
             return loss.mean()
         elif self.reduction == 'sum':

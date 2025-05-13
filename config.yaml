@@ -77,7 +77,7 @@ scheduler:
 criterion: FocalLoss
 criterion_params: # Parameters specific to the criterion
   # For FocalLoss:
-  gamma: 1.0
+  gamma: 0.5
   reduction: 'mean'
   # For F1Loss:
   # beta: 1.0
