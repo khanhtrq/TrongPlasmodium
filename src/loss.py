@@ -81,8 +81,8 @@ class F1Loss(nn.Module):
     def __init__(self, num_classes, epsilon=1e-7, beta=1.0, reduction='mean'):
         super(F1Loss, self).__init__()
         self.num_classes = num_classes
-        self.epsilon = epsilon
-        self.beta = beta
+        self.epsilon = float(epsilon)  # Ensure epsilon is a float
+        self.beta = float(beta)        # Ensure beta is a float
         self.reduction = reduction
 
     def forward(self, inputs, targets):
