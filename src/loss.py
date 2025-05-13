@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.modules.loss import _Loss
 from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
 
@@ -177,6 +178,119 @@ class GHMCClassificationLoss(nn.Module):
         # Loss tính theo BCE logits
         loss = F.binary_cross_entropy_with_logits(logits, target, weights, reduction='sum') / tot
         return loss * self.loss_weight
+
+def ib_loss(input_values, ib):
+    """Computes the focal loss"""
+    loss = input_values * ib
+    return loss.mean()
+
+class IBLoss(nn.Module):
+    def __init__(self, weight=None, alpha=10000.):
+        super(IBLoss, self).__init__()
+        assert alpha > 0
+        self.alpha = alpha
+        self.epsilon = 0.001
+        self.weight = weight
+
+    def forward(self, input, target, features):
+        grads = torch.sum(torch.abs(F.softmax(input, dim=1) - F.one_hot(target, num_classes)),1) # N * 1
+        ib = grads*features.reshape(-1)
+        ib = self.alpha / (ib + self.epsilon)
+        return ib_loss(F.cross_entropy(input, target, reduction='none', weight=self.weight), ib)
+
+def ib_focal_loss(input_values, ib, gamma):
+    """Computes the ib focal loss"""
+    p = torch.exp(-input_values)
+    loss = (1 - p) ** gamma * input_values * ib
+    return loss.mean()
+
+class IB_FocalLoss(nn.Module):
+    def __init__(self, weight=None, alpha=10000., gamma=0.):
+        super(IB_FocalLoss, self).__init__()
+        assert alpha > 0
+        self.alpha = alpha
+        self.epsilon = 0.001
+        self.weight = weight
+        self.gamma = gamma
+
+    def forward(self, input, target, features):
+        grads = torch.sum(torch.abs(F.softmax(input, dim=1) - F.one_hot(target, num_classes)),1) # N * 1
+        ib = grads*(features.reshape(-1))
+        ib = self.alpha / (ib + self.epsilon)
+        return ib_focal_loss(F.cross_entropy(input, target, reduction='none', weight=self.weight), ib, self.gamma)
+
+class LDAMLoss(nn.Module):
+    """
+    LDAMLoss for classification, compatible with nn.CrossEntropyLoss input format.
+    Args:
+        cls_num_list: List or array of number of samples per class.
+        max_m: Maximum margin.
+        weight: Optional tensor of per-class weights.
+        s: Scaling factor.
+    """
+    def __init__(self, cls_num_list, max_m=0.5, weight=None, s=30):
+        super(LDAMLoss, self).__init__()
+        m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
+        m_list = m_list * (max_m / np.max(m_list))
+        self.m_list = torch.tensor(m_list, dtype=torch.float32)  # Store as CPU tensor, move to device in forward
+        assert s > 0
+        self.s = s
+        self.weight = weight
+
+    def forward(self, input, target):
+        """
+        Args:
+            input: [batch_size, num_classes] logits (same as nn.CrossEntropyLoss)
+            target: [batch_size] integer class indices
+        Returns:
+            Scalar loss
+        """
+        if input.device != self.m_list.device:
+            m_list = self.m_list.to(input.device)
+        else:
+            m_list = self.m_list
+
+        # Create margin tensor for each sample in the batch
+        batch_m = m_list[target]  # [batch_size]
+        # Subtract margin only from the true class logits
+        output = input.clone()
+        output[torch.arange(input.size(0)), target] -= batch_m
+
+        return F.cross_entropy(self.s * output, target, weight=self.weight)
+
+def bmc_loss(pred, target, noise_var):
+    """
+    Compute the Balanced MSE Loss (BMC) for classification logits and integer targets.
+    Args:
+      pred: Tensor of shape [batch, num_classes] (logits).
+      target: Tensor of shape [batch] (integer class indices).
+      noise_var: float or tensor.
+    Returns:
+      loss: scalar tensor.
+    """
+    # For each sample, get the predicted logit for the true class
+    pred_true = pred.gather(1, target.view(-1, 1)).squeeze(1)  # [batch]
+    # For each sample, compute - (logit - 1)^2 / (2 * noise_var) for the true class (simulate "matching" score)
+    logits = - (pred_true - 1).pow(2) / (2 * noise_var)
+    # The "target" for cross-entropy is always 0 (since we have only one score per sample)
+    # So we can just take the negative mean as the loss (maximize the matching score)
+    loss = -logits.mean()
+    loss = loss * (2 * noise_var).detach()
+    return loss
+
+class BMCLoss(_Loss):
+    def __init__(self, init_noise_sigma=8.):
+        super(BMCLoss, self).__init__()
+        self.noise_sigma = torch.nn.Parameter(torch.tensor(init_noise_sigma))
+
+    def forward(self, pred, target):
+        """
+        Args:
+            pred: [batch, num_classes] logits (like nn.CrossEntropyLoss)
+            target: [batch] integer class indices
+        """
+        noise_var = self.noise_sigma ** 2
+        return bmc_loss(pred, target, noise_var)
     
 def get_criterion(criterion, num_classes, device, criterion_params=None):
     criterion = criterion.lower() if isinstance(criterion, str) else criterion
@@ -200,6 +314,28 @@ def get_criterion(criterion, num_classes, device, criterion_params=None):
             bins=criterion_params.get('bins', 10),
             momentum=criterion_params.get('momentum', 0.0),
             loss_weight=criterion_params.get('loss_weight', 1.0)
+        ).to(device)
+    elif criterion == 'ibloss':
+        return IBLoss(
+            weight=criterion_params.get('weight', None),
+            alpha=float(criterion_params.get('alpha', 10000.))
+        ).to(device)
+    elif criterion == 'ib_focalloss':
+        return IB_FocalLoss(
+            weight=criterion_params.get('weight', None),
+            alpha=float(criterion_params.get('alpha', 10000.)),
+            gamma=float(criterion_params.get('gamma', 2.))
+        ).to(device)
+    elif criterion == 'bmcloss':
+        return BMCLoss(
+            init_noise_sigma=float(criterion_params.get('init_noise_sigma', 8.))
+        ).to(device)
+    elif criterion == 'ldamloss':
+        return LDAMLoss(
+            cls_num_list=criterion_params.get('cls_num_list', [1]*num_classes),
+            max_m=float(criterion_params.get('max_m', 0.5)),
+            weight=criterion_params.get('weight', None),
+            s=float(criterion_params.get('s', 30))
         ).to(device)
     else:
         ce_kwargs = {}
@@ -281,3 +417,51 @@ if __name__ == "__main__":
     print(f"F1Loss (wrong): {f1_loss(logits_wrong, targets_wrong).item():.4f}")
     print(f"CrossEntropyLoss (wrong): {ce_loss(logits_wrong, targets_wrong).item():.4f}")
     print(f"GHMCClassificationLoss (wrong): {ghmc_loss_fn(logits_wrong, targets_wrong).item():.4f}")
+
+    # ==== Test các loss đặc biệt ====
+    print("\n=== Testing IBLoss ===")
+    ib_loss_fn = get_criterion('ibloss', num_classes, device)
+    features = torch.rand(batch_size, device=device)
+    loss_ib = ib_loss_fn(logits, targets, features)
+    print("IBLoss:", loss_ib.item())
+
+    print("\n=== Testing IB_FocalLoss ===")
+    ib_focal_loss_fn = get_criterion('ib_focalloss', num_classes, device)
+    loss_ib_focal = ib_focal_loss_fn(logits, targets, features)
+    print("IB_FocalLoss:", loss_ib_focal.item())
+
+    print("\n=== Testing BMCLoss ===")
+    bmcloss_fn = get_criterion('bmcloss', num_classes, device)
+    pred_bmc = torch.randn(batch_size, num_classes, device=device)
+    target_bmc = torch.randint(0, num_classes, (batch_size,), device=device)
+    loss_bmc = bmcloss_fn(pred_bmc, target_bmc)
+    print("BMCLoss:", loss_bmc.item())
+
+    print("\n=== Testing LDAMLoss ===")
+    cls_num_list = [batch_size // num_classes for _ in range(num_classes)]
+    ldamloss_fn = get_criterion('ldamloss', num_classes, device, {'cls_num_list': cls_num_list})
+    loss_ldam = ldamloss_fn(logits, targets)
+    print("LDAMLoss:", loss_ldam.item())
+
+    # ==== Best case & Worst case cho các loss đặc biệt ====
+    print("\n=== Best case: All predictions correct (special losses) ===")
+    features_perfect = torch.rand(batch_size, device=device)
+    # IBLoss
+    print("IBLoss (perfect):", ib_loss_fn(logits_perfect, targets_perfect, features_perfect).item())
+    # IB_FocalLoss
+    print("IB_FocalLoss (perfect):", ib_focal_loss_fn(logits_perfect, targets_perfect, features_perfect).item())
+    # BMCLoss
+    print("BMCLoss (perfect):", bmcloss_fn(logits_perfect, targets_perfect).item())
+    # LDAMLoss
+    print("LDAMLoss (perfect):", ldamloss_fn(logits_perfect, targets_perfect).item())
+
+    print("\n=== Worst case: All predictions wrong (special losses) ===")
+    features_wrong = torch.rand(batch_size, device=device)
+    # IBLoss
+    print("IBLoss (wrong):", ib_loss_fn(logits_wrong, targets_wrong, features_wrong).item())
+    # IB_FocalLoss
+    print("IB_FocalLoss (wrong):", ib_focal_loss_fn(logits_wrong, targets_wrong, features_wrong).item())
+    # BMCLoss
+    print("BMCLoss (wrong):", bmcloss_fn(logits_wrong, targets_wrong).item())
+    # LDAMLoss
+    print("LDAMLoss (wrong):", ldamloss_fn(logits_wrong, targets_wrong).item())
