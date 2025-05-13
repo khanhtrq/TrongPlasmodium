@@ -5,62 +5,32 @@ from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=1.0, gamma=2.0, reduction='mean', eps=1e-8):
+    def __init__(self, alpha=1.0, gamma=2.0, reduction='mean'):
         super(FocalLoss, self).__init__()
-        
-        if gamma < 0:
-            # While the question is about 0 < gamma < 1, ensuring gamma is non-negative is good practice.
-            raise ValueError("Gamma must be non-negative for FocalLoss.")
-        
-        if eps <= 0:
-            raise ValueError("Epsilon (eps) must be a positive value for numerical stability.")
-            
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
-        self.eps = eps  # A small epsilon for numerical stability
 
     def forward(self, inputs, targets):
-        # inputs: (batch_size, num_classes) - Raw logits
-        # targets: (batch_size) - Long tensor of class indices
-
         logpt = F.log_softmax(inputs, dim=1)
         pt = torch.exp(logpt)
-        
-        # Gather log probabilities and probabilities for the target class
         logpt = logpt.gather(1, targets.unsqueeze(1)).squeeze(1)
         pt = pt.gather(1, targets.unsqueeze(1)).squeeze(1)
         
-        # Clamp pt to prevent log(0) and (0)^x issues, crucial for stability.
-        # This clamping ensures (1-pt) is also kept away from 0.
-        # For 0 < gamma < 1, (1-pt)^(gamma-1) appears in the gradient.
-        # If 1-pt were 0, and gamma-1 < 0, this would lead to division by zero (infinity).
-        pt = pt.clamp(min=self.eps, max=1.0 - self.eps)
-
-        # Calculate the focal loss term
-        # (1-pt)^gamma
-        focal_term = (1.0 - pt).pow(self.gamma)
-
-        # Alpha weighting
         if self.alpha is not None:
-            if isinstance(self.alpha, torch.Tensor):
-                # Assumes alpha is a 1D tensor of weights for each class
+            try:
                 at = self.alpha.gather(0, targets)
-            elif isinstance(self.alpha, (float, int)):
-                at = self.alpha
-            else:
-                # Fallback if alpha is an unexpected type, though ideally, type checking in __init__ would be stricter.
-                at = 1.0 
+            except:
+                at = 1.0
         else:
             at = 1.0
-
-        loss = -at * focal_term * logpt
-
+    
+        loss = -at * (1 - pt) ** self.gamma * logpt
+    
         if self.reduction == 'mean':
             return loss.mean()
         elif self.reduction == 'sum':
             return loss.sum()
-        # if 'none' or other, return element-wise loss
         return loss
 
 def compute_alpha_from_dataloader(train_loader, num_classes, device):
