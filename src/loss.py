@@ -258,24 +258,21 @@ class LDAMLoss(nn.Module):
 
         return F.cross_entropy(self.s * output, target, weight=self.weight)
 
-def bmc_loss(pred, target, noise_var):
-    """
-    Compute the Balanced MSE Loss (BMC) for classification logits and integer targets.
+from torch.distributions import MultivariateNormal as MVN
+
+def bmc_loss_md(pred, target, noise_var):
+    """Compute the Multidimensional Balanced MSE Loss (BMC) between `pred` and the ground truth `targets`.
     Args:
-      pred: Tensor of shape [batch, num_classes] (logits).
-      target: Tensor of shape [batch] (integer class indices).
-      noise_var: float or tensor.
+      pred: A float tensor of size [batch, d].
+      target: A float tensor of size [batch, d].
+      noise_var: A float number or tensor.
     Returns:
-      loss: scalar tensor.
+      loss: A float tensor. Balanced MSE Loss.
     """
-    # For each sample, get the predicted logit for the true class
-    pred_true = pred.gather(1, target.view(-1, 1)).squeeze(1)  # [batch]
-    # For each sample, compute - (logit - 1)^2 / (2 * noise_var) for the true class (simulate "matching" score)
-    logits = - (pred_true - 1).pow(2) / (2 * noise_var)
-    # The "target" for cross-entropy is always 0 (since we have only one score per sample)
-    # So we can just take the negative mean as the loss (maximize the matching score)
-    loss = -logits.mean()
-    loss = loss * (2 * noise_var).detach()
+    I = torch.eye(pred.shape[-1], device=pred.device)
+    logits = MVN(pred.unsqueeze(1), noise_var * I).log_prob(target.unsqueeze(0))  # logit size: [batch, batch]
+    loss = F.cross_entropy(logits, torch.arange(pred.shape[0], device=pred.device))  # contrastive-like loss
+    loss = loss * (2 * noise_var).detach()  # optional: restore the loss scale, 'detach' when noise is learnable 
     return loss
 
 class BMCLoss(_Loss):
@@ -283,14 +280,20 @@ class BMCLoss(_Loss):
         super(BMCLoss, self).__init__()
         self.noise_sigma = torch.nn.Parameter(torch.tensor(init_noise_sigma))
 
-    def forward(self, pred, target):
+    def forward(self, input, target):
         """
         Args:
-            pred: [batch, num_classes] logits (like nn.CrossEntropyLoss)
-            target: [batch] integer class indices
+            input: [batch_size, num_classes] logits (same as nn.CrossEntropyLoss)
+            target: [batch_size] integer class indices
+        Returns:
+            Scalar loss
         """
+        # Convert targets to one-hot and float for BMC
+        num_classes = input.size(1)
+        target_onehot = F.one_hot(target, num_classes=num_classes).float()
         noise_var = self.noise_sigma ** 2
-        return bmc_loss(pred, target, noise_var)
+        return bmc_loss_md(input, target_onehot, noise_var)
+
     
 def get_criterion(criterion, num_classes, device, criterion_params=None):
     criterion = criterion.lower() if isinstance(criterion, str) else criterion
@@ -432,9 +435,7 @@ if __name__ == "__main__":
 
     print("\n=== Testing BMCLoss ===")
     bmcloss_fn = get_criterion('bmcloss', num_classes, device)
-    pred_bmc = torch.randn(batch_size, num_classes, device=device)
-    target_bmc = torch.randint(0, num_classes, (batch_size,), device=device)
-    loss_bmc = bmcloss_fn(pred_bmc, target_bmc)
+    loss_bmc = bmcloss_fn(logits, targets)
     print("BMCLoss:", loss_bmc.item())
 
     print("\n=== Testing LDAMLoss ===")

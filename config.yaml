@@ -74,7 +74,7 @@ scheduler:
   eta_min: 1e-6 # For CosineAnnealingLR: Minimum learning rate
 
 # --- Loss Function (Criterion) Configuration ---
-criterion: ldamloss
+criterion: bmcloss
 criterion_params: # Parameters specific to the criterion
   # For FocalLoss:
   # gamma: 3
