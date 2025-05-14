@@ -369,12 +369,24 @@ def main():
                 optimizer = optim.Adam(params_to_update, lr=learning_rate)
 
                 print(f"\n📉 Criterion: {config.get('criterion', 'CrossEntropyLoss').capitalize()}")
+                # Tính cls_num_list: số lượng phần tử của từng class trong tập train
+                if hasattr(final_train_dataset_full, 'targets') and hasattr(final_train_dataset_full, 'classes'):
+                    targets_np = np.array(final_train_dataset_full.targets)
+                    cls_num_list = [int(np.sum(targets_np == i)) for i in range(len(final_train_dataset_full.classes))]
+                else:
+                    warnings.warn("Không thể tính cls_num_list: Dataset không có thuộc tính 'targets' hoặc 'classes'. Sử dụng mặc định [0].")
+                    cls_num_list = [1] * num_classes
+
+                criterion_params = config.get('criterion_params', {})
+                criterion_params['cls_num_list'] = cls_num_list
+
                 criterion = get_criterion(
                     config.get('criterion', 'CrossEntropyLoss'),
                     num_classes=num_classes,
                     device=device,
-                    criterion_params=config.get('criterion_params', {})
+                    criterion_params=criterion_params
                 )
+                
 
                 print(f"\n📅 LR Scheduler: {scheduler_config.get('type', 'StepLR').capitalize()}")
                 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_config.get('step_size', 7), gamma=scheduler_config.get('gamma', 0.1))
