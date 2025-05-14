@@ -367,8 +367,8 @@ def main():
 
                 print(f"\n🔧 Optimizer: {optimizer_config.get('type', 'Adam').capitalize()}")
                 optimizer = optim.Adam(params_to_update, lr=learning_rate)
-
-                print(f"\n📉 Criterion: {config.get('criterion', 'CrossEntropyLoss').capitalize()}")
+                criterion_name = optimizer_config.get('criterion', 'CrossEntropyLoss').lower()
+                print(f"\n📉 Criterion: {criterion_name}")
                 # Tính cls_num_list: số lượng phần tử của từng class trong tập train
                 if hasattr(final_train_dataset_full, 'targets') and hasattr(final_train_dataset_full, 'classes'):
                     targets_np = np.array(final_train_dataset_full.targets)
@@ -386,6 +386,11 @@ def main():
                     device=device,
                     criterion_params=criterion_params
                 )
+                
+                if criterion_name == 'bmcloss' or criterion_name == 'gailoss':
+                    optimizer.add_param_group({'params': criterion.noise_sigma, 'lr': 1e-2, 'name': 'noise_sigma'})
+                    
+                
                 
 
                 print(f"\n📅 LR Scheduler: {scheduler_config.get('type', 'StepLR').capitalize()}")
