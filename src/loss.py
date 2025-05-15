@@ -294,6 +294,22 @@ class BMCLoss(_Loss):
         noise_var = self.noise_sigma ** 2
         return bmc_loss_md(input, target_onehot, noise_var)
 
+def get_active_criterion(epoch, criterion_a, criterion_b=None, first_stage_epochs=0):
+    """
+    Returns the active criterion based on the current epoch.
+    
+    Args:
+        epoch: Current epoch number (0-indexed)
+        criterion_a: Primary criterion to use
+        criterion_b: Secondary criterion to use after first_stage_epochs
+        first_stage_epochs: Number of epochs to use criterion_a
+    
+    Returns:
+        The active criterion for the current epoch
+    """
+    if criterion_b is not None and first_stage_epochs > 0 and epoch >= first_stage_epochs:
+        return criterion_b
+    return criterion_a
     
 def get_criterion(criterion, num_classes, device, criterion_params=None):
     criterion = criterion.lower() if isinstance(criterion, str) else criterion

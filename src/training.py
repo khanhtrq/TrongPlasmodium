@@ -9,6 +9,7 @@ import warnings
 import torch.nn.utils as torch_utils  # For gradient clipping
 import math  # For ceiling function
 from torch.utils.data import DataLoader, SubsetRandomSampler  # Import sampler
+from src.loss import get_active_criterion  # Import the helper function
 
 try:
     import torch_xla.core.xla_model as xm
@@ -18,8 +19,15 @@ except ImportError:
 
 def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                 num_epochs=25, patience=5, use_amp=True, save_path='best_model.pth',
-                log_path='training_log.csv', clip_grad_norm=1.0, train_ratio=1.0):  # Add train_ratio
-    """Trains the model, tracks history, handles early stopping, and saves the best weights."""
+                log_path='training_log.csv', clip_grad_norm=1.0, train_ratio=1.0,
+                criterion_b=None, first_stage_epochs=0):  # Add new parameters
+    """
+    Trains the model, tracks history, handles early stopping, and saves the best weights.
+    
+    Additional parameters:
+        criterion_b: Secondary criterion to use after first_stage_epochs
+        first_stage_epochs: Number of epochs to use criterion_a (primary criterion) before switching
+    """
     since = time.time()
 
     # --- Input Validation ---
@@ -71,7 +79,14 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
     print(f"   Epochs: {num_epochs}, Patience: {patience}")
     print(f"   Device: {device}, AMP: {use_amp}, Grad Clip Norm: {clip_grad_norm}")
     print(f"   Optimizer: {type(optimizer).__name__}, LR Scheduler: {type(scheduler).__name__}")
-    print(f"   Criterion: {type(criterion).__name__}")
+    
+    # Print criterion configuration
+    if criterion_b is not None and first_stage_epochs > 0:
+        print(f"   Criterion A (first {first_stage_epochs} epochs): {type(criterion).__name__}")
+        print(f"   Criterion B (remaining epochs): {type(criterion_b).__name__}")
+    else:
+        print(f"   Criterion: {type(criterion).__name__}")
+        
     print(f"   Best Model Path: {save_path}")
     print(f"   Log Path: {log_path}")
     print(f"   Primary Metric for Improvement: {primary_metric}")
@@ -82,6 +97,17 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
         epoch_start_time = time.time()
         print(f'\nEpoch {epoch+1}/{num_epochs}')
         print('-' * 20)
+        
+        # Log current criterion
+        if criterion_b is not None and first_stage_epochs > 0:
+            if epoch == first_stage_epochs:
+                print(f"🔄 Switching from criterion A to criterion B at epoch {epoch+1}")
+            current_criterion = get_active_criterion(epoch, criterion, criterion_b, first_stage_epochs)
+            criterion_name = "A" if current_criterion == criterion else "B"
+            print(f"   Using criterion {criterion_name}: {type(current_criterion).__name__}")
+        else:
+            current_criterion = criterion
+            
         history['epoch'].append(epoch + 1)
         history['lr'].append(optimizer.param_groups[0]['lr'])  # Log LR at start of epoch
 
@@ -154,7 +180,9 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                     amp_dtype = torch.float16 if is_cuda else torch.bfloat16
                     with torch.cuda.amp.autocast(enabled=(use_amp and is_cuda), dtype=amp_dtype):
                         outputs = model(inputs)
-                        loss = criterion(outputs, labels)
+                        # Use the active criterion for this epoch
+                        active_criterion = get_active_criterion(epoch, criterion, criterion_b, first_stage_epochs)
+                        loss = active_criterion(outputs, labels)
 
                     # Check for NaN/Inf loss *before* backward pass
                     if not torch.isfinite(loss).item():

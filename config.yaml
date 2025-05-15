@@ -59,6 +59,7 @@ training:
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
   clip_grad_norm: 0 # Max norm for gradient clipping (set to 0 or null to disable)
   train_ratio: 1 # Ratio of the (combined) training set to use (1.0 = 100%, 0.1 = 10%)
+  first_stage_epochs: 20 # Number of epochs to use criterion_a before switching to criterion_b
 
 # --- Optimizer Configuration ---
 optimizer:
@@ -74,16 +75,19 @@ scheduler:
   eta_min: 1e-6 # For CosineAnnealingLR: Minimum learning rate
 
 # --- Loss Function (Criterion) Configuration ---
-criterion: bmcloss
-criterion_params: # Parameters specific to the criterion
-  # For FocalLoss:
-  # gamma: 3
-  # reduction: 'mean'
-  # For F1Loss:
-  # beta: 1.0
-  # epsilon: 1e-7
-  # For CrossEntropyLoss:
-  use_class_weights: false # Set to true to compute and use class weights
+criterion_a: crossentropyloss  # First criterion to use
+criterion_a_params:     # Parameters for first criterion
+  use_class_weights: false
+  
+criterion_b: FocalLoss    # Second criterion to use (after first_stage_epochs)
+criterion_b_params:     # Parameters for second criterion
+  gamma: 2.0
+  alpha: 1
+
+# legacy configuration (will be used if criterion_a is not specified)
+criterion: crossentropyloss
+criterion_params: 
+  use_class_weights: false
 
 # --- Results Directory ---
 results_dir: 'results_kaggle' # Separate results dir for Kaggle runs

@@ -367,32 +367,63 @@ def main():
 
                 print(f"\n🔧 Optimizer: {optimizer_config.get('type', 'Adam').capitalize()}")
                 optimizer = optim.Adam(params_to_update, lr=learning_rate)
-                criterion_name = optimizer_config.get('criterion', 'CrossEntropyLoss').lower()
-                print(f"\n📉 Criterion: {criterion_name}")
-                # Tính cls_num_list: số lượng phần tử của từng class trong tập train
+                
+                # Extract first_stage_epochs from training params
+                first_stage_epochs = training_params.get('first_stage_epochs', 0)
+                
+                # Check for dual criterion configuration
+                criterion_a_name = config.get('criterion_a', config.get('criterion', 'CrossEntropyLoss')).lower()
+                criterion_a_params = config.get('criterion_a_params', config.get('criterion_params', {}))
+                criterion_b_name = config.get('criterion_b', '').lower()
+                criterion_b_params = config.get('criterion_b_params', {})
+                
+                # Determine if we're using dual criterions
+                using_dual_criterions = first_stage_epochs > 0 and criterion_b_name
+                
+                # Calculate cls_num_list for both criterions if needed
                 if hasattr(final_train_dataset_full, 'targets') and hasattr(final_train_dataset_full, 'classes'):
                     targets_np = np.array(final_train_dataset_full.targets)
                     cls_num_list = [int(np.sum(targets_np == i)) for i in range(len(final_train_dataset_full.classes))]
                 else:
-                    warnings.warn("Không thể tính cls_num_list: Dataset không có thuộc tính 'targets' hoặc 'classes'. Sử dụng mặc định [0].")
+                    warnings.warn("Cannot calculate cls_num_list: Dataset missing 'targets' or 'classes' attributes. Using default [1] * num_classes.")
                     cls_num_list = [1] * num_classes
-
-                criterion_params = config.get('criterion_params', {})
-                criterion_params['cls_num_list'] = cls_num_list
-
-                criterion = get_criterion(
-                    config.get('criterion', 'CrossEntropyLoss'),
+                
+                # Add class list to both criterion params
+                criterion_a_params['cls_num_list'] = cls_num_list
+                criterion_b_params['cls_num_list'] = cls_num_list
+                
+                # Print criterion setup information
+                if using_dual_criterions:
+                    print(f"\n📉 Dual Criterion Training:")
+                    print(f"   First {first_stage_epochs} epochs: {criterion_a_name}")
+                    print(f"   Remaining epochs: {criterion_b_name}")
+                else:
+                    print(f"\n📉 Single Criterion: {criterion_a_name}")
+                
+                # Initialize criterion_a (always needed)
+                criterion_a = get_criterion(
+                    criterion_a_name,
                     num_classes=num_classes,
                     device=device,
-                    criterion_params=criterion_params
+                    criterion_params=criterion_a_params
                 )
                 
-                if criterion_name == 'bmcloss' or criterion_name == 'gailoss':
-                    optimizer.add_param_group({'params': criterion.noise_sigma, 'lr': 1e-2, 'name': 'noise_sigma'})
-                    
+                # Initialize criterion_b (only if using dual criterions)
+                criterion_b = None
+                if using_dual_criterions:
+                    criterion_b = get_criterion(
+                        criterion_b_name,
+                        num_classes=num_classes, 
+                        device=device,
+                        criterion_params=criterion_b_params
+                    )
                 
+                # Add noise_sigma parameters to optimizer if needed
+                if criterion_a_name in ['bmcloss', 'gailoss']:
+                    optimizer.add_param_group({'params': criterion_a.noise_sigma, 'lr': 1e-2, 'name': 'noise_sigma_a'})
+                if criterion_b and criterion_b_name in ['bmcloss', 'gailoss']:
+                    optimizer.add_param_group({'params': criterion_b.noise_sigma, 'lr': 1e-2, 'name': 'noise_sigma_b'})
                 
-
                 print(f"\n📅 LR Scheduler: {scheduler_config.get('type', 'StepLR').capitalize()}")
                 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_config.get('step_size', 7), gamma=scheduler_config.get('gamma', 0.1))
 
@@ -403,7 +434,9 @@ def main():
                 model, history = train_model(
                     model=model,
                     dataloaders=dataloaders,
-                    criterion=criterion,
+                    criterion=criterion_a,  # Pass criterion_a as primary criterion
+                    criterion_b=criterion_b,  # Pass criterion_b as secondary criterion
+                    first_stage_epochs=first_stage_epochs,  # Pass first_stage_epochs parameter
                     optimizer=optimizer,
                     scheduler=scheduler,
                     device=device,
