@@ -19,7 +19,7 @@ from src.model_initializer import initialize_model
 from src.training import train_model
 from src.evaluation import infer_from_annotation, report_classification
 from src.gradcam import generate_and_save_gradcam_per_class
-from src.loss import FocalLoss, F1Loss, compute_class_weights, get_criterion
+from src.loss import FocalLoss, F1Loss, get_criterion  # MODIFIED: Removed unused compute_class_weights
 from src.visualization import (
     plot_sample_images_per_class,
     plot_training_curves,
@@ -412,6 +412,14 @@ def main():
                 if criterion_b_name == 'ldamloss':
                     criterion_b_params['cls_num_list'] = cls_num_list
                 
+                # Add samples_per_cls to both criterion params if criterion is cbloss
+                if criterion_a_name in ['cbloss', 'classbalancedloss']:
+                    criterion_a_params['samples_per_cls'] = cls_num_list
+                    criterion_a_params['num_classes'] = num_classes
+                if criterion_b_name in ['cbloss', 'classbalancedloss']:
+                    criterion_b_params['samples_per_cls'] = cls_num_list
+                    criterion_b_params['num_classes'] = num_classes
+
                 # Print criterion setup information
                 if using_dual_criterions:
                     print(f"\n📉 Dual Criterion Training:")

@@ -258,21 +258,71 @@ class LDAMLoss(nn.Module):
 
         return F.cross_entropy(self.s * output, target, weight=self.weight)
 
+# Helper function for ClassBalancedLoss
+def _cb_focal_loss(labels_one_hot, logits, alpha, gamma):
+    """Compute the focal loss between `logits` and the ground truth `labels_one_hot`."""    
+    BCLoss = F.binary_cross_entropy_with_logits(input = logits, target = labels_one_hot, reduction = "none")
+
+    if gamma == 0.0:
+        modulator = 1.0
+    else:
+        modulator = torch.exp(-gamma * labels_one_hot * logits - gamma * torch.log(1 + torch.exp(-1.0 * logits)))
+
+    loss = modulator * BCLoss
+    weighted_loss = alpha * loss
+    focal_loss = torch.sum(weighted_loss)
+    focal_loss /= torch.sum(labels_one_hot)
+    return focal_loss
+
+def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, beta, gamma):
+    """Compute the Class Balanced Loss between `logits` and the ground truth `labels`."""
+    effective_num = 1.0 - np.power(beta, samples_per_cls)
+    weights_per_cls = (1.0 - beta) / np.array(effective_num)
+    weights_per_cls = weights_per_cls / np.sum(weights_per_cls) * no_of_classes
+
+    labels_one_hot = F.one_hot(labels, no_of_classes).float().to(logits.device)
+    weights_tensor = torch.tensor(weights_per_cls, dtype=torch.float32, device=logits.device)
+    cb_weights = weights_tensor[labels].unsqueeze(1).repeat(1, no_of_classes)
+
+    if loss_type == "focal":
+        cb_loss = _cb_focal_loss(labels_one_hot, logits, cb_weights, gamma)
+    elif loss_type == "sigmoid":
+        bce_loss_terms = F.binary_cross_entropy_with_logits(input=logits, target=labels_one_hot, weight=cb_weights, reduction="sum")
+        cb_loss = bce_loss_terms / labels_one_hot.shape[0]
+    elif loss_type == "softmax":
+        pred = logits.softmax(dim = 1)
+        bce_on_softmax_terms = F.binary_cross_entropy(input=pred, target=labels_one_hot, weight=cb_weights, reduction="sum")
+        cb_loss = bce_on_softmax_terms / labels_one_hot.shape[0]
+    else:
+        raise ValueError(f"Unsupported loss_type: {loss_type} for CB_loss")
+        
+    return cb_loss
+
+class ClassBalancedLoss(nn.Module):
+    def __init__(self, samples_per_cls, num_classes, loss_type='focal', beta=0.9999, gamma=2.0):
+        super(ClassBalancedLoss, self).__init__()
+        self.samples_per_cls = samples_per_cls
+        self.num_classes = num_classes
+        self.loss_type = loss_type
+        self.beta = beta
+        self.gamma = gamma
+        if not isinstance(samples_per_cls, (list, np.ndarray, torch.Tensor)):
+            raise TypeError("samples_per_cls must be a list, numpy array or torch tensor.")
+        if len(samples_per_cls) != num_classes:
+            raise ValueError(f"Length of samples_per_cls ({len(samples_per_cls)}) must be equal to num_classes ({num_classes}).")
+
+    def forward(self, logits, target):
+        return CB_loss(target, logits, self.samples_per_cls, self.num_classes,
+                       self.loss_type, self.beta, self.gamma)
+
 from torch.distributions import MultivariateNormal as MVN
 
 def bmc_loss_md(pred, target, noise_var):
-    """Compute the Multidimensional Balanced MSE Loss (BMC) between `pred` and the ground truth `targets`.
-    Args:
-      pred: A float tensor of size [batch, d].
-      target: A float tensor of size [batch, d].
-      noise_var: A float number or tensor.
-    Returns:
-      loss: A float tensor. Balanced MSE Loss.
-    """
+    """Compute the Multidimensional Balanced MSE Loss (BMC) between `pred` and the ground truth `targets`."""
     I = torch.eye(pred.shape[-1], device=pred.device)
-    logits = MVN(pred.unsqueeze(1), noise_var * I).log_prob(target.unsqueeze(0))  # logit size: [batch, batch]
-    loss = F.cross_entropy(logits, torch.arange(pred.shape[0], device=pred.device))  # contrastive-like loss
-    loss = loss * (2 * noise_var).detach()  # optional: restore the loss scale, 'detach' when noise is learnable 
+    logits = MVN(pred.unsqueeze(1), noise_var * I).log_prob(target.unsqueeze(0))
+    loss = F.cross_entropy(logits, torch.arange(pred.shape[0], device=pred.device))
+    loss = loss * (2 * noise_var).detach()
     return loss
 
 class BMCLoss(_Loss):
@@ -281,32 +331,12 @@ class BMCLoss(_Loss):
         self.noise_sigma = torch.nn.Parameter(torch.tensor(init_noise_sigma))
 
     def forward(self, input, target):
-        """
-        Args:
-            input: [batch_size, num_classes] logits (same as nn.CrossEntropyLoss)
-            target: [batch_size] integer class indices
-        Returns:
-            Scalar loss
-        """
-        # Convert targets to one-hot and float for BMC
         num_classes = input.size(1)
         target_onehot = F.one_hot(target, num_classes=num_classes).float()
         noise_var = self.noise_sigma ** 2
         return bmc_loss_md(input, target_onehot, noise_var)
 
 def get_active_criterion(epoch, criterion_a, criterion_b=None, first_stage_epochs=0):
-    """
-    Returns the active criterion based on the current epoch.
-    
-    Args:
-        epoch: Current epoch number (0-indexed)
-        criterion_a: Primary criterion to use
-        criterion_b: Secondary criterion to use after first_stage_epochs
-        first_stage_epochs: Number of epochs to use criterion_a
-    
-    Returns:
-        The active criterion for the current epoch
-    """
     if criterion_b is not None and first_stage_epochs > 0 and epoch >= first_stage_epochs:
         return criterion_b
     return criterion_a
@@ -356,6 +386,17 @@ def get_criterion(criterion, num_classes, device, criterion_params=None):
             weight=criterion_params.get('weight', None),
             s=float(criterion_params.get('s', 30))
         ).to(device)
+    elif criterion in ['cbloss', 'classbalancedloss']:
+        samples_per_cls = criterion_params.get('samples_per_cls')
+        if samples_per_cls is None:
+            raise ValueError("samples_per_cls must be provided for ClassBalancedLoss")
+        return ClassBalancedLoss(
+            samples_per_cls=samples_per_cls,
+            num_classes=num_classes,
+            loss_type=criterion_params.get('loss_type', 'focal'),
+            beta=float(criterion_params.get('beta', 0.9999)),
+            gamma=float(criterion_params.get('gamma', 2.0))
+        ).to(device)
     else:
         ce_kwargs = {}
         if 'weight' in criterion_params:
@@ -398,22 +439,17 @@ if __name__ == "__main__":
     # Test GHMCClassificationLoss (dùng CPU nếu không có CUDA)
     print("\nTesting GHMCClassificationLoss:")
     ghmc_loss_fn = get_criterion('ghmc', num_classes, device)
-    # Chuẩn bị target dạng index (giống CrossEntropy)
     ghmc_loss = ghmc_loss_fn(logits, targets)
     print("GHMCClassificationLoss:", ghmc_loss.item())
 
     # ==== Trường hợp lý tưởng: tất cả predict đều đúng ====
     print("\n=== Ideal case: All predictions correct ===")
-    # Logits: mỗi sample, đúng class có giá trị lớn nhất (ví dụ: 10.0), các class khác giá trị nhỏ (ví dụ: -10.0)
-    targets_perfect = torch.randint(0, num_classes, (batch_size,), device=device) # Giữ targets ngẫu nhiên
+    targets_perfect = torch.randint(0, num_classes, (batch_size,), device=device)
     logits_perfect = torch.full((batch_size, num_classes), -10.0, device=device, dtype=torch.float32)
     logits_perfect[torch.arange(batch_size), targets_perfect] = 10.0
     logits_perfect.requires_grad_(True)
 
-
     print("Targets (perfect):", targets_perfect)
-    # print("Logits (perfect):\n", logits_perfect) # Có thể bỏ comment để xem
-
     print(f"FocalLoss (perfect): {focal_loss(logits_perfect, targets_perfect).item():.4f}")
     print(f"F1Loss (perfect): {f1_loss(logits_perfect, targets_perfect).item():.4f}")
     print(f"CrossEntropyLoss (perfect): {ce_loss(logits_perfect, targets_perfect).item():.4f}")
@@ -421,17 +457,13 @@ if __name__ == "__main__":
 
     # ==== Trường hợp lý tưởng: tất cả predict đều sai ====
     print("\n=== Worst case: All predictions wrong ===")
-    # Logits: mỗi sample, một class sai nào đó có giá trị lớn nhất
-    targets_wrong = torch.randint(0, num_classes, (batch_size,), device=device) # Giữ targets ngẫu nhiên
+    targets_wrong = torch.randint(0, num_classes, (batch_size,), device=device)
     logits_wrong = torch.full((batch_size, num_classes), -10.0, device=device, dtype=torch.float32)
-    # Chọn một class sai ngẫu nhiên cho mỗi sample để đặt giá trị cao
     wrong_class_indices = (targets_wrong + torch.randint(1, num_classes, (batch_size,), device=device)) % num_classes
     logits_wrong[torch.arange(batch_size), wrong_class_indices] = 10.0
     logits_wrong.requires_grad_(True)
 
     print("Targets (wrong):", targets_wrong)
-    # print("Logits (wrong):\n", logits_wrong) # Có thể bỏ comment để xem
-
     print(f"FocalLoss (wrong): {focal_loss(logits_wrong, targets_wrong).item():.4f}")
     print(f"F1Loss (wrong): {f1_loss(logits_wrong, targets_wrong).item():.4f}")
     print(f"CrossEntropyLoss (wrong): {ce_loss(logits_wrong, targets_wrong).item():.4f}")
@@ -460,25 +492,48 @@ if __name__ == "__main__":
     loss_ldam = ldamloss_fn(logits, targets)
     print("LDAMLoss:", loss_ldam.item())
 
-    # ==== Best case & Worst case cho các loss đặc biệt ====
+    print("\n=== Testing ClassBalancedLoss (CB_loss) ===")
+    if num_classes == 4:
+        samples_per_cls_test = [100, 50, 200, 80]
+    else:
+        samples_per_cls_test = [batch_size // num_classes + i*5 for i in range(num_classes)]
+
+    print(f"Using samples_per_cls: {samples_per_cls_test} for CB_loss")
+
+    cb_loss_focal_fn = get_criterion('cbloss', num_classes, device, 
+                                     {'samples_per_cls': samples_per_cls_test, 
+                                      'loss_type': 'focal', 'beta': 0.9999, 'gamma': 2.0})
+    loss_cb_focal = cb_loss_focal_fn(logits, targets)
+    print(f"ClassBalancedLoss (focal): {loss_cb_focal.item()}")
+
+    cb_loss_sigmoid_fn = get_criterion('cbloss', num_classes, device, 
+                                       {'samples_per_cls': samples_per_cls_test, 
+                                        'loss_type': 'sigmoid', 'beta': 0.9999})
+    loss_cb_sigmoid = cb_loss_sigmoid_fn(logits, targets)
+    print(f"ClassBalancedLoss (sigmoid): {loss_cb_sigmoid.item()}")
+    
+    cb_loss_softmax_fn = get_criterion('cbloss', num_classes, device, 
+                                       {'samples_per_cls': samples_per_cls_test, 
+                                        'loss_type': 'softmax', 'beta': 0.9999})
+    loss_cb_softmax = cb_loss_softmax_fn(logits, targets)
+    print(f"ClassBalancedLoss (softmax): {loss_cb_softmax.item()}")
+
     print("\n=== Best case: All predictions correct (special losses) ===")
     features_perfect = torch.rand(batch_size, device=device)
-    # IBLoss
     print("IBLoss (perfect):", ib_loss_fn(logits_perfect, targets_perfect, features_perfect).item())
-    # IB_FocalLoss
     print("IB_FocalLoss (perfect):", ib_focal_loss_fn(logits_perfect, targets_perfect, features_perfect).item())
-    # BMCLoss
     print("BMCLoss (perfect):", bmcloss_fn(logits_perfect, targets_perfect).item())
-    # LDAMLoss
     print("LDAMLoss (perfect):", ldamloss_fn(logits_perfect, targets_perfect).item())
+    print(f"ClassBalancedLoss (focal, perfect): {cb_loss_focal_fn(logits_perfect, targets_perfect).item():.4f}")
+    print(f"ClassBalancedLoss (sigmoid, perfect): {cb_loss_sigmoid_fn(logits_perfect, targets_perfect).item():.4f}")
+    print(f"ClassBalancedLoss (softmax, perfect): {cb_loss_softmax_fn(logits_perfect, targets_perfect).item():.4f}")
 
     print("\n=== Worst case: All predictions wrong (special losses) ===")
     features_wrong = torch.rand(batch_size, device=device)
-    # IBLoss
     print("IBLoss (wrong):", ib_loss_fn(logits_wrong, targets_wrong, features_wrong).item())
-    # IB_FocalLoss
     print("IB_FocalLoss (wrong):", ib_focal_loss_fn(logits_wrong, targets_wrong, features_wrong).item())
-    # BMCLoss
     print("BMCLoss (wrong):", bmcloss_fn(logits_wrong, targets_wrong).item())
-    # LDAMLoss
     print("LDAMLoss (wrong):", ldamloss_fn(logits_wrong, targets_wrong).item())
+    print(f"ClassBalancedLoss (focal, wrong): {cb_loss_focal_fn(logits_wrong, targets_wrong).item():.4f}")
+    print(f"ClassBalancedLoss (sigmoid, wrong): {cb_loss_sigmoid_fn(logits_wrong, targets_wrong).item():.4f}")
+    print(f"ClassBalancedLoss (softmax, wrong): {cb_loss_softmax_fn(logits_wrong, targets_wrong).item():.4f}")
