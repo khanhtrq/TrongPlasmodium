@@ -425,7 +425,10 @@ def main():
                     optimizer.add_param_group({'params': criterion_b.noise_sigma, 'lr': 1e-2, 'name': 'noise_sigma_b'})
                 
                 print(f"\n📅 LR Scheduler: {scheduler_config.get('type', 'StepLR').capitalize()}")
-                scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_config.get('step_size', 7), gamma=scheduler_config.get('gamma', 0.1))
+                if scheduler_config.get('type', 'StepLR').lower() == 'cosineannealinglr':
+                    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0)
+                else:
+                    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_config.get('step_size', 7), gamma=scheduler_config.get('gamma', 0.1))
 
                 print(f"\n🏋️ Starting training for model: {model_name} (Batch Size: {current_batch_size}, Train Ratio: {train_ratio:.2f})...")
                 model_save_path = os.path.join(model_results_dir, f'{model_name}_best.pth')
