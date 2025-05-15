@@ -82,6 +82,7 @@ criterion_a_params:     # Parameters for first criterion
   
 criterion_b: bmcloss    # Second criterion to use (after first_stage_epochs)
 criterion_b_params:     # Parameters for second criterion
+  # use_class_weights: false
   # gamma: 5.0
   # alpha: 1
 

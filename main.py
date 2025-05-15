@@ -390,7 +390,7 @@ def main():
                 
                 # Add class list to both criterion params
                 criterion_a_params['cls_num_list'] = cls_num_list
-                criterion_b_params['cls_num_list'] = cls_num_list
+                criterion_b_params['cls_num_list'] = cls_num_list if criterion_b_params else {}
                 
                 # Print criterion setup information
                 if using_dual_criterions:
