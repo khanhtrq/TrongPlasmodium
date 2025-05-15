@@ -76,11 +76,11 @@ scheduler:
 
 
 # --- Loss Function (Criterion) Configuration ---
-criterion_a: null  # First criterion to use
+criterion_a: crossentropyloss  # First criterion to use
 criterion_a_params:     # Parameters for first criterion
   use_class_weights: false
   
-criterion_b: null    # Second criterion to use (after first_stage_epochs)
+criterion_b: crossentropyloss    # Second criterion to use (after first_stage_epochs)
 criterion_b_params:     # Parameters for second criterion
   # use_class_weights: false
   # gamma: 5.0
