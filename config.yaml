@@ -63,10 +63,10 @@ training:
 
 # --- Optimizer Configuration ---
 optimizer:
-  type: AdamW # Options: Adam, AdamW, SGD, etc.
+  type: Adam # Options: Adam, AdamW, SGD, etc.
   lr: 1e-4    # Learning Rate moved here
   params: # Parameters specific to the optimizer type
-    weight_decay: 0.01 # Example for AdamW
+    weight_decay: 5e-3 # Example for Adam
 
 # --- LR Scheduler Configuration ---
 scheduler:
@@ -76,11 +76,11 @@ scheduler:
 
 
 # --- Loss Function (Criterion) Configuration ---
-criterion_a: crossentropyloss  # First criterion to use
+criterion_a: null  # First criterion to use
 criterion_a_params:     # Parameters for first criterion
   use_class_weights: false
   
-criterion_b: bmcloss    # Second criterion to use (after first_stage_epochs)
+criterion_b: null    # Second criterion to use (after first_stage_epochs)
 criterion_b_params:     # Parameters for second criterion
   # use_class_weights: false
   # gamma: 5.0

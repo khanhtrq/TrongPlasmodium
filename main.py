@@ -366,7 +366,25 @@ def main():
                     print("   Optimizing all model parameters.")
 
                 print(f"\n🔧 Optimizer: {optimizer_config.get('type', 'Adam').capitalize()}")
-                optimizer = optim.Adam(params_to_update, lr=learning_rate)
+                
+                optimizer_type = optimizer_config.get('type', 'Adam').lower()
+                optimizer_params_config = optimizer_config.get('params', {})
+                
+                # Common parameter: learning rate
+                optimizer_params_config['lr'] = learning_rate
+
+                if optimizer_type == 'adam':
+                    optimizer = optim.Adam(params_to_update, **optimizer_params_config)
+                elif optimizer_type == 'adamw':
+                    optimizer = optim.AdamW(params_to_update, **optimizer_params_config)
+                elif optimizer_type == 'sgd':
+                    optimizer = optim.SGD(params_to_update, **optimizer_params_config)
+                # Add more optimizers as needed
+                # elif optimizer_type == 'rmsprop':
+                #     optimizer = optim.RMSprop(params_to_update, **optimizer_params_config)
+                else:
+                    warnings.warn(f"Unsupported optimizer type: {optimizer_type}. Defaulting to Adam.")
+                    optimizer = optim.Adam(params_to_update, lr=learning_rate)
                 
                 # Extract first_stage_epochs from training params
                 first_stage_epochs = training_params.get('first_stage_epochs', 0)
