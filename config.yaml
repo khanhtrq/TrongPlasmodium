@@ -66,7 +66,7 @@ optimizer:
   type: Adam # Options: Adam, AdamW, SGD, etc.
   lr: 0.0001    # Learning Rate moved here
   params: # Parameters specific to the optimizer type
-    weight_decay: 0.005 # Example for Adam
+    # weight_decay: 0.005 # Example for Adam
 
 # --- LR Scheduler Configuration ---
 scheduler:
