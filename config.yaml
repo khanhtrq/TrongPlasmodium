@@ -80,10 +80,10 @@ criterion_a: crossentropyloss  # First criterion to use
 criterion_a_params:     # Parameters for first criterion
   use_class_weights: false
   
-criterion_b: FocalLoss    # Second criterion to use (after first_stage_epochs)
+criterion_b: bmcloss    # Second criterion to use (after first_stage_epochs)
 criterion_b_params:     # Parameters for second criterion
-  gamma: 5.0
-  alpha: 1
+  # gamma: 5.0
+  # alpha: 1
 
 # legacy configuration (will be used if criterion_a is not specified)
 criterion: crossentropyloss
