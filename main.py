@@ -368,7 +368,9 @@ def main():
                 print(f"\n🔧 Optimizer: {optimizer_config.get('type', 'Adam').capitalize()}")
                 
                 optimizer_type = optimizer_config.get('type', 'Adam').lower()
-                optimizer_params_config = optimizer_config.get('params', {})
+                optimizer_params_config = optimizer_config.get('params') # Get value, could be None
+                if optimizer_params_config is None: # Ensure it's a dict
+                    optimizer_params_config = {}
                 
                 # Common parameter: learning rate
                 optimizer_params_config['lr'] = learning_rate
@@ -391,9 +393,16 @@ def main():
                 
                 # Check for dual criterion configuration
                 criterion_a_name = config.get('criterion_a', config.get('criterion', 'CrossEntropyLoss')).lower()
-                criterion_a_params = config.get('criterion_a_params', config.get('criterion_params', {}))
+                criterion_a_params = config.get('criterion_a_params')
+                if criterion_a_params is None:
+                    criterion_a_params = config.get('criterion_params') # Try fallback
+                    if criterion_a_params is None: # Ensure it's a dict
+                        criterion_a_params = {}
+                
                 criterion_b_name = config.get('criterion_b', '').lower()
-                criterion_b_params = config.get('criterion_b_params', {})
+                criterion_b_params = config.get('criterion_b_params') # Get value, could be None
+                if criterion_b_params is None: # Ensure it's a dict
+                    criterion_b_params = {}
                 
                 # Determine if we're using dual criterions
                 using_dual_criterions = first_stage_epochs > 0 and criterion_b_name
