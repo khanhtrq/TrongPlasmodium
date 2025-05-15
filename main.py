@@ -388,9 +388,11 @@ def main():
                     warnings.warn("Cannot calculate cls_num_list: Dataset missing 'targets' or 'classes' attributes. Using default [1] * num_classes.")
                     cls_num_list = [1] * num_classes
                 
-                # Add class list to both criterion params
-                criterion_a_params['cls_num_list'] = cls_num_list
-                criterion_b_params['cls_num_list'] = cls_num_list if criterion_b_params else {}
+                # Add class list to both criterion params if criterion is ldamloss
+                if criterion_a_name == 'ldamloss':
+                    criterion_a_params['cls_num_list'] = cls_num_list
+                if criterion_b_name == 'ldamloss':
+                    criterion_b_params['cls_num_list'] = cls_num_list
                 
                 # Print criterion setup information
                 if using_dual_criterions:
