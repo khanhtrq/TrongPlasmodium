@@ -59,7 +59,7 @@ training:
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
   clip_grad_norm: 0 # Max norm for gradient clipping (set to 0 or null to disable)
   train_ratio: 1 # Ratio of the (combined) training set to use (1.0 = 100%, 0.1 = 10%)
-  first_stage_epochs: 10 # Number of epochs to use criterion_a before switching to criterion_b
+  first_stage_epochs: 0 # Number of epochs to use criterion_a before switching to criterion_b
 
 # --- Optimizer Configuration ---
 optimizer:
