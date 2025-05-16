@@ -16,7 +16,7 @@ import math  # For ceiling function
 from src.data_loader import AnnotationDataset, ImageFolderWrapper, CombinedDataset, collate_fn_skip_error  # Adjusted import
 from src.device_handler import get_device, setup_model_for_training  # MODIFIED: Import setup_model_for_training
 from src.model_initializer import initialize_model
-from src.training import train_model
+from src.training import train_model, train_classifier_only  # MODIFIED: Import train_classifier_only
 from src.evaluation import infer_from_annotation, report_classification
 from src.gradcam import generate_and_save_gradcam_per_class
 from src.loss import FocalLoss, F1Loss, get_criterion  # MODIFIED: Removed unused compute_class_weights
@@ -532,6 +532,123 @@ def main():
                     print(f"⚠️ Could not plot/save training curves for {model_name}: {e}")
             else:
                 print(f"⚠️ Skipping plotting for {model_name} due to empty or invalid history data.")
+
+            # --- Classifier-Only Training Stage ---
+            classifier_train_config = training_params.get('classifier_only_training', {})
+            if classifier_train_config.get('enabled', False):
+                print(f"\n🚀 Starting Classifier-Only Fine-tuning for '{model_name}'...")
+
+                # 1. Prepare model: Freeze ALL parameters first, then unfreeze only the classifier.
+                print("   Freezing all model parameters initially.")
+                for param in model.parameters():
+                    param.requires_grad = False
+
+                # Get the classifier module using the model's method
+                classifier_module = None
+                if hasattr(model, 'get_classifier') and callable(model.get_classifier):
+                    try:
+                        classifier_module = model.get_classifier()
+                        if isinstance(classifier_module, nn.Module):
+                            print(f"   Unfreezing classifier parameters obtained from model.get_classifier()")
+                            for param in classifier_module.parameters():
+                                param.requires_grad = True
+                        else:
+                            warnings.warn(f"   ⚠️ model.get_classifier() did not return an nn.Module. NO layers were un-frozen. Ensure get_classifier() is implemented correctly.")
+                            classifier_module = None # Reset if not a module
+                    except Exception as e_gc:
+                        warnings.warn(f"   ⚠️ Error calling model.get_classifier(): {e_gc}. NO layers were un-frozen.")
+                        classifier_module = None
+                else:
+                    warnings.warn("   ⚠️ model.get_classifier() method not found. NO layers were un-frozen for classifier training. Implement this method in your model class.")
+
+                # Collect parameters that are now trainable (should only be classifier ones)
+                classifier_params_to_train = [p for p in model.parameters() if p.requires_grad]
+                
+                if not classifier_params_to_train:
+                    warnings.warn(f"⚠️ CRITICAL: No trainable parameters found for classifier-only training of '{model_name}'. Skipping this phase. Check 'get_classifier()' implementation in your model class.")
+                else:
+                    num_trainable = sum(p.numel() for p in classifier_params_to_train)
+                    print(f"   Number of parameters for classifier fine-tuning: {num_trainable}")
+
+                    # 2. Optimizer for classifier training (ensure it uses only classifier_params_to_train)
+                    cls_optimizer_config = classifier_train_config.get('optimizer', {'type': 'Adam', 'params': {'lr': 1e-4}})
+                    cls_optimizer_type = cls_optimizer_config.get('type', 'Adam').lower()
+                    cls_optimizer_params_config = cls_optimizer_config.get('params', {})
+                    if not isinstance(cls_optimizer_params_config, dict):
+                        warnings.warn(f"Classifier optimizer 'params' is not a dictionary. Using default {{'lr': 1e-4}}. Check config.")
+                        cls_optimizer_params_config = {'lr': 1e-4}
+
+                    if cls_optimizer_type == 'adam':
+                        optimizer_cls = optim.Adam(classifier_params_to_train, **cls_optimizer_params_config)
+                    elif cls_optimizer_type == 'adamw':
+                        optimizer_cls = optim.AdamW(classifier_params_to_train, **cls_optimizer_params_config)
+                    else:
+                        warnings.warn(f"Unsupported classifier optimizer type: {cls_optimizer_type}. Defaulting to Adam.")
+                        optimizer_cls = optim.Adam(classifier_params_to_train, lr=1e-4)
+                    
+                    print(f"   Classifier Optimizer: {type(optimizer_cls).__name__} with params: {optimizer_cls.defaults}")
+
+                    # 3. Scheduler for classifier training
+                    cls_scheduler_config = classifier_train_config.get('scheduler', {})
+                    cls_scheduler_type = cls_scheduler_config.get('type', 'ReduceLROnPlateau').lower()
+                    cls_scheduler_params_config = cls_scheduler_config.get('params', {})
+                    scheduler_cls = None
+                    if cls_scheduler_type == 'reducelronplateau':
+                        scheduler_cls = optim.lr_scheduler.ReduceLROnPlateau(optimizer_cls, **cls_scheduler_params_config)
+                    elif cls_scheduler_type == 'steplr':
+                        scheduler_cls = optim.lr_scheduler.StepLR(optimizer_cls, **cls_scheduler_params_config)
+
+                    if scheduler_cls:
+                        print(f"   Classifier Scheduler: {type(scheduler_cls).__name__} with params: {cls_scheduler_params_config}")
+                    else:
+                        print("   Classifier Scheduler: None")
+                    
+                    # 4. Criterion for classifier training
+                    criterion_cls_a = criterion_a
+                    criterion_cls_b = criterion_b
+                    cls_first_stage_epochs = first_stage_epochs
+
+                    cls_model_save_path = os.path.join(model_results_dir, f'{model_name}_classifier_best.pth')
+                    cls_log_save_path = os.path.join(model_results_dir, f'{model_name}_classifier_training_log.csv')
+
+                    try:
+                        model, history_cls = train_classifier_only(
+                            model=model,
+                            dataloaders=dataloaders,
+                            criterion=criterion_cls_a,
+                            criterion_b=criterion_cls_b,
+                            first_stage_epochs=cls_first_stage_epochs,
+                            optimizer=optimizer_cls,
+                            scheduler=scheduler_cls,
+                            device=device,
+                            num_epochs=classifier_train_config.get('num_epochs', 10),
+                            patience=classifier_train_config.get('patience', 3),
+                            use_amp=use_amp,
+                            save_path=cls_model_save_path,
+                            log_path=cls_log_save_path,
+                            clip_grad_norm=classifier_train_config.get('clip_grad_norm', clip_grad_norm),
+                            train_ratio=classifier_train_config.get('train_ratio', train_ratio)
+                        )
+                        print(f"✅ Classifier-Only Fine-tuning completed for '{model_name}'.")
+
+                        cls_plot_file_path = os.path.join(model_results_dir, f'{model_name}_classifier_training_curves.png')
+                        if history_cls:
+                            plot_training_curves(history_cls, title_suffix=f" ({model_name} - Classifier, BS={current_batch_size})", save_path=cls_plot_file_path)
+                        else:
+                            print(f"⚠️ No history returned from classifier training for {model_name}, cannot plot curves.")
+                    
+                    except Exception as e_cls:
+                        print(f"❌❌❌ An error occurred during classifier-only training for model {model_name}: {e_cls}")
+                        import traceback
+                        traceback.print_exc()
+                        print("   Skipping further processing for this model after classifier training error.")
+                    
+                    del optimizer_cls, criterion_cls_a
+                    if scheduler_cls: del scheduler_cls
+                    if criterion_cls_b: del criterion_cls_b
+                    if 'history_cls' in locals(): del history_cls
+                    gc.collect()
+                    if device.type == 'cuda': torch.cuda.empty_cache()
 
             print(f"\n🧪 Evaluating model: {model_name} on the test set using best weights...")
             model.eval()

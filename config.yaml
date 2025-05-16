@@ -66,7 +66,7 @@ optimizer:
   type: Adam # Options: Adam, AdamW, SGD, etc.
   lr: 0.0001    # Learning Rate moved here
   params: # Parameters specific to the optimizer type
-    # weight_decay: 0.005 # Example for Adam
+    weight_decay: 0.005 # Example for Adam
 
 # --- LR Scheduler Configuration ---
 scheduler:
@@ -76,11 +76,11 @@ scheduler:
 
 
 # --- Loss Function (Criterion) Configuration ---
-criterion_a: cbloss  # First criterion to use
+criterion_a: crossentropyloss  # First criterion to use
 criterion_a_params:     # Parameters for first criterion
   # use_class_weights: false
   
-criterion_b: cbloss    # Second criterion to use (after first_stage_epochs)
+criterion_b: crossentropyloss    # Second criterion to use (after first_stage_epochs)
 criterion_b_params:     # Parameters for second criterion
   # use_class_weights: false
   # gamma: 5.0
@@ -90,6 +90,43 @@ criterion_b_params:     # Parameters for second criterion
 criterion: crossentropyloss
 criterion_params: 
   use_class_weights: false
+
+# --- Classifier-Only Training Configuration (NEW SECTION) ---
+classifier_only_training:
+  enabled: true               # Set to true to run this phase, false to skip
+  num_epochs: 100              # Number of epochs for classifier fine-tuning
+  patience: 20                # Early stopping patience for classifier fine-tuning
+  use_amp: False             # Can be different from main training, if desired
+  clip_grad_norm: 0       # Max norm for gradient clipping for this phase
+  train_ratio: 1.0          # Ratio of training set for this phase (usually 1.0)
+  first_stage_epochs: 0     # If using a two-stage criterion for classifier training
+
+  optimizer:
+    type: Adam # Options: Adam, AdamW, SGD, etc.
+    lr: 0.0001    # Learning Rate moved here
+    params: # Parameters specific to the optimizer type
+      weight_decay: 0.005 # Example for Adam
+
+  scheduler:
+    type: StepLR
+    # step_size: 5            # Example if using StepLR
+    # gamma: 0.5              # Example if using StepLR
+    params:                   # Params for ReduceLROnPlateau or other schedulers
+      step_size: 7
+      gamma: 0.1
+
+  # Optional: Define specific criteria for classifier training
+  # If not defined, it might reuse criteria from the main training (depending on main.py logic)
+  criterion_a: cbloss
+  criterion_a_params:
+    # use_class_weights: false # Or true, with weights calculated for this phase if needed
+    # gamma: 2.0
+    # alpha: 0.25
+  #
+  # criterion_b: CrossEntropyLoss # Optional secondary criterion for this phase
+  # criterion_b_params:
+  #   use_class_weights: false
+
 
 # --- Results Directory ---
 results_dir: 'results_kaggle' # Separate results dir for Kaggle runs
