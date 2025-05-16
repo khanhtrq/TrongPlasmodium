@@ -745,7 +745,9 @@ def main():
 
             print(f"\n🔥 Generating Grad-CAM visualizations for: {model_name}")
             gradcam_save_dir = os.path.join(model_results_dir, "gradcam_visualizations")
-
+            # ensure parameter can draw by gradcam
+            for p in model.parameters():
+                p.requires_grad = True
             try:
                 generate_and_save_gradcam_per_class(
                     model=model,
