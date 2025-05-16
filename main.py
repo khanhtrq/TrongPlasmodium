@@ -534,7 +534,8 @@ def main():
                 print(f"⚠️ Skipping plotting for {model_name} due to empty or invalid history data.")
 
             # --- Classifier-Only Training Stage ---
-            classifier_train_config = training_params.get('classifier_only_training', {})
+            classifier_train_config = config.get('classifier_only_training', {})
+            print(f"\n🔍 Classifier-Only Fine-tuning Config: {classifier_train_config}")
             if classifier_train_config.get('enabled', False):
                 print(f"\n🚀 Starting Classifier-Only Fine-tuning for '{model_name}'...")
 
