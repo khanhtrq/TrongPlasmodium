@@ -605,9 +605,85 @@ def main():
                         print("   Classifier Scheduler: None")
                     
                     # 4. Criterion for classifier training
-                    criterion_cls_a = criterion_a
-                    criterion_cls_b = criterion_b
-                    cls_first_stage_epochs = first_stage_epochs
+                    # --- BEGIN: Load classifier-only criterion config properly ---
+                    # Use classifier_only_training's criterion config if present, else fallback to main
+                    cls_criterion_a_name = classifier_train_config.get('criterion_a', classifier_train_config.get('criterion', None))
+                    if cls_criterion_a_name is None:
+                        cls_criterion_a_name = config.get('criterion_a', config.get('criterion', 'CrossEntropyLoss'))
+                    cls_criterion_a_name = str(cls_criterion_a_name).lower()
+
+                    cls_criterion_a_params = classifier_train_config.get('criterion_a_params')
+                    if cls_criterion_a_params is None:
+                        cls_criterion_a_params = classifier_train_config.get('criterion_params')
+                    if cls_criterion_a_params is None:
+                        cls_criterion_a_params = config.get('criterion_a_params', config.get('criterion_params', {}))
+                    if cls_criterion_a_params is None:
+                        cls_criterion_a_params = {}
+
+                    cls_criterion_b_name = classifier_train_config.get('criterion_b')
+                    if cls_criterion_b_name is None:
+                        cls_criterion_b_name = config.get('criterion_b', '')
+                    cls_criterion_b_name = str(cls_criterion_b_name).lower() if cls_criterion_b_name else ''
+
+                    cls_criterion_b_params = classifier_train_config.get('criterion_b_params')
+                    if cls_criterion_b_params is None:
+                        cls_criterion_b_params = {}
+                    # first_stage_epochs for classifier-only phase
+                    cls_first_stage_epochs = classifier_train_config.get('first_stage_epochs', 0)
+                    # --- END: Load classifier-only criterion config properly ---
+
+                    # Calculate cls_num_list for both criterions if needed
+                    if hasattr(final_train_dataset_full, 'targets') and hasattr(final_train_dataset_full, 'classes'):
+                        targets_np = np.array(final_train_dataset_full.targets)
+                        cls_num_list = [int(np.sum(targets_np == i)) for i in range(len(final_train_dataset_full.classes))]
+                    else:
+                        warnings.warn("Cannot calculate cls_num_list: Dataset missing 'targets' or 'classes' attributes. Using default [1] * num_classes.")
+                        cls_num_list = [1] * num_classes
+
+                    # Add class list to both criterion params if criterion is ldamloss
+                    if cls_criterion_a_name == 'ldamloss':
+                        cls_criterion_a_params['cls_num_list'] = cls_num_list
+                    if cls_criterion_b_name == 'ldamloss':
+                        cls_criterion_b_params['cls_num_list'] = cls_num_list
+
+                    # Add samples_per_cls to both criterion params if criterion is cbloss
+                    if cls_criterion_a_name in ['cbloss', 'classbalancedloss']:
+                        cls_criterion_a_params['samples_per_cls'] = cls_num_list
+                        cls_criterion_a_params['num_classes'] = num_classes
+                    if cls_criterion_b_name in ['cbloss', 'classbalancedloss']:
+                        cls_criterion_b_params['samples_per_cls'] = cls_num_list
+                        cls_criterion_b_params['num_classes'] = num_classes
+
+                    # Print criterion setup information
+                    using_cls_dual_criterions = cls_first_stage_epochs > 0 and cls_criterion_b_name
+                    if using_cls_dual_criterions:
+                        print(f"\n📉 Classifier-Only Dual Criterion Training:")
+                        print(f"   First {cls_first_stage_epochs} epochs: {cls_criterion_a_name}")
+                        print(f"   Remaining epochs: {cls_criterion_b_name}")
+                    else:
+                        print(f"\n📉 Classifier-Only Single Criterion: {cls_criterion_a_name}")
+
+                    # Initialize classifier-only criterions
+                    criterion_cls_a = get_criterion(
+                        cls_criterion_a_name,
+                        num_classes=num_classes,
+                        device=device,
+                        criterion_params=cls_criterion_a_params
+                    )
+                    criterion_cls_b = None
+                    if using_cls_dual_criterions:
+                        criterion_cls_b = get_criterion(
+                            cls_criterion_b_name,
+                            num_classes=num_classes,
+                            device=device,
+                            criterion_params=cls_criterion_b_params
+                        )
+
+                    # Add noise_sigma parameters to optimizer if needed
+                    if cls_criterion_a_name in ['bmcloss', 'gailoss']:
+                        optimizer_cls.add_param_group({'params': criterion_cls_a.noise_sigma, 'lr': 1e-2, 'name': 'noise_sigma_a'})
+                    if criterion_cls_b and cls_criterion_b_name in ['bmcloss', 'gailoss']:
+                        optimizer_cls.add_param_group({'params': criterion_cls_b.noise_sigma, 'lr': 1e-2, 'name': 'noise_sigma_b'})
 
                     cls_model_save_path = os.path.join(model_results_dir, f'{model_name}_classifier_best.pth')
                     cls_log_save_path = os.path.join(model_results_dir, f'{model_name}_classifier_training_log.csv')
