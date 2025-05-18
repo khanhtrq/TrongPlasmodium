@@ -120,7 +120,7 @@ class F1Loss(nn.Module):
 
 
 class GHMCClassificationLoss(nn.Module):
-    def __init__(self, bins=10, momentum=0.0, loss_weight=1.0):
+    def __init__(self, bins=10, momentum=0.1, loss_weight=1.0):
         super().__init__()
         self.bins = bins
         self.momentum = momentum
