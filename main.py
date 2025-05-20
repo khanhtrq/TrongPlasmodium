@@ -734,7 +734,8 @@ def main():
                 model=model,
                 class_names=final_class_names,
                 device=device,
-                dataloader=test_loader
+                dataloader=test_loader,
+                save_txt = True,
             )
 
             if y_true and y_pred:

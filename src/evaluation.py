@@ -9,7 +9,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 import warnings
 
-def infer_from_annotation(model, class_names, device, dataloader=None, annotation_file=None, root_dir=None, transform=None):
+def infer_from_annotation(model, class_names, device, dataloader=None, annotation_file=None, root_dir=None, transform=None, save_txt=False, save_txt_path="inference_results.txt"):
     """
     Run inference on a dataset, prioritizing DataLoader for efficiency.
 
@@ -21,14 +21,19 @@ def infer_from_annotation(model, class_names, device, dataloader=None, annotatio
         annotation_file (str, optional): Fallback. Path to annotation file. Required if dataloader is None.
         root_dir (str, optional): Fallback. Root directory for images. Required if dataloader is None.
         transform (callable, optional): Fallback. Transform to apply. Required if dataloader is None.
+        save_txt (bool, optional): If True, save inference results to a .txt file.
+        save_txt_path (str, optional): Path to save the .txt file.
 
     Returns:
         tuple: (y_true, y_pred) - Lists of true labels and predicted labels. Returns ([], []) on error.
     """
+    import torch.nn.functional as F
+
     model.eval() # Ensure model is in evaluation mode
     y_true = []
     y_pred = []
     num_classes = len(class_names)
+    results_lines = []
 
     if dataloader is not None:
         # --- Preferred Method: Use DataLoader for Batch Inference ---
@@ -41,8 +46,18 @@ def infer_from_annotation(model, class_names, device, dataloader=None, annotatio
         processed_samples = 0
         with torch.no_grad(): # Disable gradient calculations for inference
             pbar = tqdm(dataloader, desc="Inferencing batches", total=len(dataloader), unit="batch")
-            for inputs, labels in pbar:
-                 # Skip batch if data loading failed (indicated by empty tensors)
+            for batch_idx, (inputs, labels, *extras) in enumerate(pbar):
+                # Support for datasets that return (inputs, labels, file_paths)
+                file_paths = None
+                if len(extras) > 0:
+                    file_paths = extras[0]
+                else:
+                    # Try to get file_paths from dataset if possible
+                    if hasattr(dataloader.dataset, 'samples'):
+                        file_paths = [s[0] for s in dataloader.dataset.samples][batch_idx * inputs.size(0):(batch_idx + 1) * inputs.size(0)]
+                    else:
+                        file_paths = [f"sample_{processed_samples + i}" for i in range(inputs.size(0))]
+
                 if inputs.numel() == 0 or labels.numel() == 0:
                     warnings.warn(f"Skipping empty batch during inference. Check data loading.")
                     continue
@@ -50,15 +65,25 @@ def infer_from_annotation(model, class_names, device, dataloader=None, annotatio
                 inputs = inputs.to(device, non_blocking=True)
                 labels_cpu = labels.cpu().numpy() # Keep labels on CPU
 
-                # No need for AMP autocast during standard inference
                 outputs = model(inputs)
+                probs = F.softmax(outputs, dim=1).cpu().numpy()
                 preds = outputs.argmax(dim=1).cpu().numpy() # Get predictions on CPU
 
                 y_pred.extend(preds)
                 y_true.extend(labels_cpu)
                 processed_samples += len(labels_cpu)
                 pbar.set_postfix({'processed': f'{processed_samples}/{dataset_size}'})
-                del inputs, labels, outputs, preds # Cleanup
+
+                if save_txt:
+                    for i in range(len(labels_cpu)):
+                        path = file_paths[i] if file_paths is not None else f"sample_{processed_samples - len(labels_cpu) + i}"
+                        label = labels_cpu[i]
+                        pred = preds[i]
+                        scores = probs[i]
+                        line = f"{path}\t{label}\t{pred}\t" + "\t".join([f"{score:.6f}" for score in scores])
+                        results_lines.append(line)
+
+                del inputs, labels, outputs, preds, probs # Cleanup
 
         print(f"✅ Completed batch inference on {processed_samples}/{dataset_size} samples.")
 
@@ -86,13 +111,10 @@ def infer_from_annotation(model, class_names, device, dataloader=None, annotatio
                     continue
                 rel_path, label_str = parts
                 try:
-                    # Assume label in file needs mapping based on class_names order
-                    # This requires careful handling matching the Dataset logic
-                    # For simplicity here, let's assume the label_str IS the correct 0-based index
                     label = int(label_str)
                     if not (0 <= label < num_classes):
-                         print(f"❓ Warning: Label {label} from file is out of range [0, {num_classes-1}]. Skipping line {i+1}.")
-                         continue
+                        print(f"❓ Warning: Label {label} from file is out of range [0, {num_classes-1}]. Skipping line {i+1}.")
+                        continue
                 except ValueError:
                     print(f"❓ Warning: Non-integer label '{label_str}' on line {i+1}. Skipping.")
                     continue
@@ -101,13 +123,13 @@ def infer_from_annotation(model, class_names, device, dataloader=None, annotatio
 
                 try:
                     if not os.path.exists(img_path):
-                        # print(f"❓ Warning: Image not found at {img_path}, skipping line {i+1}.") # Too verbose
                         continue
 
                     image = Image.open(img_path).convert('RGB')
                     input_tensor = transform(image).unsqueeze(0).to(device) # Add batch dim and move to device
 
                     outputs = model(input_tensor)
+                    probs = F.softmax(outputs, dim=1).cpu().numpy()[0]
                     pred = outputs.argmax(dim=1).item() # Get single prediction
 
                     y_pred.append(pred)
@@ -115,13 +137,15 @@ def infer_from_annotation(model, class_names, device, dataloader=None, annotatio
                     processed_samples += 1
                     pbar.set_postfix({'processed': f'{processed_samples}/{num_samples}'})
 
+                    if save_txt:
+                        line_txt = f"{rel_path}\t{label}\t{pred}\t" + "\t".join([f"{score:.6f}" for score in probs])
+                        results_lines.append(line_txt)
+
                 except Exception as e:
                     print(f"❓ Error processing image '{img_path}' or running model: {e}. Skipping line {i+1}.")
-                    # Cleanup tensor if created
                     if 'input_tensor' in locals(): del input_tensor
                     if 'outputs' in locals(): del outputs
                     if device.type == 'cuda': torch.cuda.empty_cache()
-
 
         print(f"✅ Completed single-image inference on {processed_samples}/{num_samples} samples.")
 
@@ -130,11 +154,21 @@ def infer_from_annotation(model, class_names, device, dataloader=None, annotatio
         print("❌ Error: Cannot perform inference. Provide either a DataLoader or all of (annotation_file, root_dir, transform).")
         return [], []
 
+    # --- Save results to txt if requested ---
+    if save_txt and results_lines:
+        try:
+            with open(save_txt_path, "w", encoding="utf-8") as f:
+                for line in results_lines:
+                    f.write(line + "\n")
+            print(f"💾 Inference results saved to: {save_txt_path}")
+        except Exception as e:
+            print(f"❌ Error saving inference results to txt: {e}")
+
     # --- Final Check ---
     if len(y_true) != len(y_pred):
-         print(f"⚠️ Warning: Mismatch between number of true labels ({len(y_true)}) and predictions ({len(y_pred)}). Results might be unreliable.")
+        print(f"⚠️ Warning: Mismatch between number of true labels ({len(y_true)}) and predictions ({len(y_pred)}). Results might be unreliable.")
     elif not y_true: # Check if the list is empty
-         print("⚠️ Warning: No samples were successfully processed during inference.")
+        print("⚠️ Warning: No samples were successfully processed during inference.")
 
     return y_true, y_pred
 
