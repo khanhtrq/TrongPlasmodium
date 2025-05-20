@@ -156,7 +156,13 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
                 'std': (0.229, 0.224, 0.225),
                 'crop_pct': 0.875 # Common default
             }
-
+    try:
+        print("number of parameters in model: ", sum(p.numel() for p in model_ft.parameters() if p.requires_grad))
+        print(" Flops: ", torch.cuda.FloatTensor(1, 3, input_size, input_size).numel() * 2 / 1e9) # Rough estimate of FLOPs
+        print(" Model size: ", sum(p.numel() for p in model_ft.parameters()) / 1e6, "M")
+    except Exception as e:
+        print(f"⚠️ Error calculating model size or FLOPs: {e}")
+    
     return model_ft, input_size, transform, model_config
 
 if __name__ == "__main__":

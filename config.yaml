@@ -77,7 +77,7 @@ scheduler:
   factor: 0.5         # Reduce LR by a factor of 0.5
   patience: 5         # Number of epochs with no improvement before reducing LR
   threshold: 0.01     # Minimum change to qualify as improvement
-  min_lr: 1e-6        # Lower bound on the learning rate
+  min_lr: 0.000001        # Lower bound on the learning rate
 
 
 # --- Loss Function (Criterion) Configuration ---
