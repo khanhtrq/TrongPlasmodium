@@ -80,7 +80,7 @@ def infer_from_annotation(model, class_names, device, dataloader=None, annotatio
                         label = labels_cpu[i]
                         pred = preds[i]
                         scores = probs[i]
-                        line = f"{path}\t{label}\t{pred}\t" + "\t".join([f"{score:.6f}" for score in scores])
+                        line = f"{path},{label},{pred}," + ",".join([f"{score:.6f}" for score in scores])
                         results_lines.append(line)
 
                 del inputs, labels, outputs, preds, probs # Cleanup
@@ -138,7 +138,7 @@ def infer_from_annotation(model, class_names, device, dataloader=None, annotatio
                     pbar.set_postfix({'processed': f'{processed_samples}/{num_samples}'})
 
                     if save_txt:
-                        line_txt = f"{rel_path}\t{label}\t{pred}\t" + "\t".join([f"{score:.6f}" for score in probs])
+                        line_txt = f"{rel_path},{label},{pred}," + ",".join([f"{score:.6f}" for score in probs])
                         results_lines.append(line_txt)
 
                 except Exception as e:
@@ -305,3 +305,4 @@ def report_classification(y_true, y_pred, class_names, save_path_base=None):
         if 'fig_norm_pred' in locals(): plt.close(fig_norm_pred)
 
     print("\n" + "="*20 + " End Report " + "="*20)
+

@@ -71,6 +71,8 @@ def main():
         scheduler_config = config.get('scheduler', {})
         device_config = config.get('device', {})
 
+        # --- Training Parameters ---
+        dropout_rate = float(training_params.get('dropout_rate', 0.0))  # Ensure dropout_rate is a float
         num_epochs = training_params.get('num_epochs', 50)
         patience = training_params.get('patience', 10)
         use_amp = training_params.get('use_amp', True)
@@ -150,7 +152,7 @@ def main():
                 # --- Initialize Model and Get Model-Specific Config ---
                 temp_num_classes = num_classes if num_classes is not None else 1
                 model, input_size, model_specific_transform, model_config = initialize_model(
-                    model_name, num_classes=temp_num_classes, use_pretrained=True, feature_extract=False
+                    model_name, num_classes=temp_num_classes, use_pretrained=True, feature_extract=False, drop_rate=dropout_rate
                 )
 
                 # --- Determine Transform to Use ---
@@ -256,7 +258,7 @@ def main():
                                     if temp_num_classes != num_classes:
                                         print(f"   Re-initializing model '{model_name}' with inferred {num_classes} classes...")
                                         del model; gc.collect(); torch.cuda.empty_cache()
-                                        model, input_size, model_specific_transform, model_config = initialize_model(model_name, num_classes=num_classes, use_pretrained=True, feature_extract=False)
+                                        model, input_size, model_specific_transform, model_config = initialize_model(model_name, num_classes=num_classes, use_pretrained=True, feature_extract=False, drop_rate=dropout_rate)
                                         if model_specific_transform: transform_train = transform_eval = model_specific_transform
                                         else:
                                             transform_train = transforms.Compose([transforms.Resize((input_size, input_size)), transforms.RandomHorizontalFlip(), transforms.RandomRotation(10), transforms.ToTensor(), transforms.Normalize(mean=model_config['mean'], std=model_config['std'])])
@@ -462,10 +464,40 @@ def main():
                     optimizer.add_param_group({'params': criterion_b.noise_sigma, 'lr': 1e-2, 'name': 'noise_sigma_b'})
                 
                 print(f"\n📅 LR Scheduler: {scheduler_config.get('type', 'StepLR').capitalize()}")
-                if scheduler_config.get('type', 'StepLR').lower() == 'cosineannealinglr':
-                    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=0)
+                scheduler_type = scheduler_config.get('type', 'StepLR').lower()
+                scheduler = None
+                if scheduler_type == 'cosineannealinglr':
+                    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+                        optimizer,
+                        T_max=num_epochs,
+                        eta_min=scheduler_config.get('min_lr', 0)
+                    )
+                elif scheduler_type == 'reducelronplateau':
+                    # Remove keys not accepted by ReduceLROnPlateau
+                    reduce_params = dict(scheduler_config)
+                    reduce_params.pop('type', None)
+                    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+                        optimizer,
+                        mode=reduce_params.get('mode', 'max'),
+                        factor=reduce_params.get('factor', 0.1),
+                        patience=reduce_params.get('patience', 10),
+                        threshold=reduce_params.get('threshold', 1e-4),
+                        min_lr=reduce_params.get('min_lr', 0),
+                        verbose=True
+                    )
+                elif scheduler_type == 'steplr':
+                    scheduler = optim.lr_scheduler.StepLR(
+                        optimizer,
+                        step_size=scheduler_config.get('step_size', 7),
+                        gamma=scheduler_config.get('gamma', 0.1)
+                    )
                 else:
-                    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_config.get('step_size', 7), gamma=scheduler_config.get('gamma', 0.1))
+                    warnings.warn(f"Unsupported scheduler type: {scheduler_type}. Defaulting to StepLR.")
+                    scheduler = optim.lr_scheduler.StepLR(
+                        optimizer,
+                        step_size=7,
+                        gamma=0.1
+                    )
 
                 print(f"\n🏋️ Starting training for model: {model_name} (Batch Size: {current_batch_size}, Train Ratio: {train_ratio:.2f})...")
                 model_save_path = os.path.join(model_results_dir, f'{model_name}_best.pth')

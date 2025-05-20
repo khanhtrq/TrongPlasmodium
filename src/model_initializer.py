@@ -23,7 +23,7 @@ def set_parameter_requires_grad(model, feature_extracting):
         for param in model.parameters():
             param.requires_grad = False
 
-def initialize_model(model_name, num_classes, feature_extract=False, use_pretrained=True):
+def initialize_model(model_name, num_classes, feature_extract=False, use_pretrained=True, drop_rate=0.2):
     """
     Initializes a model, prioritizing timm for loading.
 
@@ -56,7 +56,8 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
         model_ft = timm.create_model(
             model_name,
             pretrained=use_pretrained,
-            num_classes=num_classes # Directly set the number of classes
+            num_classes=num_classes,
+            drop_rate=drop_rate,
         )
         print(f"✅ Successfully loaded '{model_name}' with timm.")
 
@@ -161,7 +162,7 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
 if __name__ == "__main__":
 
     # --- Test timm model ---
-    model_name_timm = "mobilenetv4_hybrid_medium.e260_r256_in1k" # Example timm model
+    model_name_timm = "mobilenetv3_large_100.miil_in21k_ft_in1k" # Example timm model
     num_classes_test = 5
     print(f"\n--- Testing timm model: {model_name_timm} ---")
     try:

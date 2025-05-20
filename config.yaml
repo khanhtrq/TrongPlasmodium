@@ -54,6 +54,7 @@ model_names:
 
 # --- Training Configuration ---
 training:
+  dropout_rate: 0.2 # Dropout rate for the model
   num_epochs: 1 # Reduced for example
   patience: 20   # Early stopping patience
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
@@ -63,16 +64,20 @@ training:
 
 # --- Optimizer Configuration ---
 optimizer:
-  type: Adam # Options: Adam, AdamW, SGD, etc.
-  lr: 0.0001    # Learning Rate moved here
-  params: # Parameters specific to the optimizer type
-    weight_decay: 0.005 # Example for Adam
+  type: SGD # Changed from Adam to SGD
+  lr: 0.01    # Typical default for SGD, adjust as needed
+  params:
+    momentum: 0.9 # Commonly used with SGD
+    weight_decay: 0.0005 # Typical value for SGD, adjust as needed
 
 # --- LR Scheduler Configuration ---
 scheduler:
-  type: StepLR
-  step_size: 7 # Number of epochs to wait before reducing LR
-  gamma: 0.1 # Factor by which to reduce LR
+  type: ReduceLROnPlateau
+  mode: 'max'         # Use 'max' if monitoring accuracy, 'min' for loss
+  factor: 0.5         # Reduce LR by a factor of 0.5
+  patience: 5         # Number of epochs with no improvement before reducing LR
+  threshold: 0.01     # Minimum change to qualify as improvement
+  min_lr: 1e-6        # Lower bound on the learning rate
 
 
 # --- Loss Function (Criterion) Configuration ---
