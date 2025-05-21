@@ -344,9 +344,9 @@ def main():
                     else:
                          warnings.warn("⚠️ Cannot plot sample images: No training datasets loaded.")
 
-                train_loader = DataLoader(final_train_dataset, batch_size=current_batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0)
-                val_loader = DataLoader(final_val_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0) if final_val_dataset else None
-                test_loader = DataLoader(final_test_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0) if final_test_dataset else None
+                train_loader = DataLoader(final_train_dataset, batch_size=current_batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0, drop_last=True)
+                val_loader = DataLoader(final_val_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0, drop_last=True) if final_val_dataset else None
+                test_loader = DataLoader(final_test_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0, drop_last=True) if final_test_dataset else None
 
                 print(f"\n📦 DataLoaders created (Batch size: {current_batch_size}, Workers: {num_workers})")
                 dataloaders = {'train': train_loader}
