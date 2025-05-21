@@ -63,11 +63,10 @@ training:
 
 # --- Optimizer Configuration ---
 optimizer:
-  type: SGD # Changed from Adam to SGD
-  lr: 0.01    # Typical default for SGD, adjust as needed
+  type: Adam
+  lr: 0.0005    # Typical default for Adam, adjust as needed
   params:
-    momentum: 0.9 # Commonly used with SGD
-    weight_decay: 0.0005 # Typical value for SGD, adjust as needed
+    weight_decay: 0.0005 # Typical value for Adam, adjust as needed
 
 # --- LR Scheduler Configuration ---
 scheduler:
