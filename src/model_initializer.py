@@ -168,7 +168,7 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
 if __name__ == "__main__":
 
     # --- Test timm model ---
-    model_name_timm = "mobilenetv3_large_100.miil_in21k_ft_in1k" # Example timm model
+    model_name_timm = "mobilenetv4_hybrid_medium.e200_r256_in12k_ft_in1k" # Example timm model
     num_classes_test = 5
     print(f"\n--- Testing timm model: {model_name_timm} ---")
     try:
@@ -179,6 +179,7 @@ if __name__ == "__main__":
         print(f"Input Size: {input_size_timm}")
         print(f"Transform: {transform_timm}")
         print(f"Config: {config_timm}")
+        print(f'type of model: {type(model_timm)}')
 
         # Test transform
         if transform_timm:
