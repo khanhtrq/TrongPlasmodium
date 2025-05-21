@@ -528,7 +528,7 @@ def main():
             except RuntimeError as e:
                 if "CUDA out of memory" in str(e):
                     print(f"\n🔥🔥🔥 CUDA Out of Memory detected for '{model_name}' with batch size {current_batch_size}! 🔥🔥🔥")
-                    del model, train_loader, val_loader, test_loader, optimizer, criterion, scheduler
+                    del model, train_loader, val_loader, test_loader, optimizer, criterion_a, criterion_b, scheduler
                     if 'history' in locals(): del history
                     gc.collect()
                     if device.type == 'cuda':

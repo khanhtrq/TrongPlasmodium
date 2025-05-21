@@ -26,7 +26,7 @@ datasets:
   #   imagefolder_val_subdir: 'val'
   #   imagefolder_test_subdir: 'test'
 
-batch_size: 128
+batch_size: 32
 num_workers: 4 # Adjusted based on typical Kaggle limits
 
 # # --- Class Configuration ---
