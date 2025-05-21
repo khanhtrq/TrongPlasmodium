@@ -1,13 +1,13 @@
 # --- Dataset Configuration ---
-data_dir: '/kaggle/input/bbbc041/dataset_resplit' # Base dir for relative paths if needed
+data_dir: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification' # Base dir for relative paths if needed
 
 # --- Datasets Configuration (List) ---
 datasets:
-  # - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
-  #   annotation_train: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/train_annotation.txt'
-  #   annotation_val: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/val_annotation.txt' # Use original val
-  #   annotation_test: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/test_annotation.txt' # Use original test
-  #   annotation_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
+  - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
+    annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
+    annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
+    annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
+    annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
 
   # - type: 'annotation' # First dataset definition (e.g., SMOTE for training)
   #   # Settings for 'annotation' type
@@ -20,11 +20,11 @@ datasets:
   #   # annotation_test_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
 
 
-  - type: 'imagefolder' # Optional: Example ImageFolder definition
-    imagefolder_root: '/kaggle/input/bbbc041/dataset_resplit'
-    imagefolder_train_subdir: 'train'
-    imagefolder_val_subdir: 'val'
-    imagefolder_test_subdir: 'test'
+  # - type: 'imagefolder' # Optional: Example ImageFolder definition
+  #   imagefolder_root: '/kaggle/input/bbbc041/dataset_resplit'
+  #   imagefolder_train_subdir: 'train'
+  #   imagefolder_val_subdir: 'val'
+  #   imagefolder_test_subdir: 'test'
 
 batch_size: 128
 num_workers: 4 # Adjusted based on typical Kaggle limits
@@ -39,13 +39,12 @@ num_workers: 4 # Adjusted based on typical Kaggle limits
 #   - "Other"
 # --- Class Configuration ---
 class_names:
-  - "difficult"
-  - "gametocyte"
-  - "leukocyte"
-  - "red blood cell"
-  - "ring"
-  - "schizont"
-  - "trophozoite"
+  - "rbc_parasitized_F_TJ"
+  - "rbc_parasitized_F_TA"
+  - "rbc_parasitized_F_S1_or_S2"
+  - "rbc_parasitized_F_G1_or_G2"
+  - "rbc_unparasitized"
+  - "rbc_unparasitized_artefact_dead_kernel"
 # --- Model Configuration ---
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model

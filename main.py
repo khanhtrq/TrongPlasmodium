@@ -761,17 +761,17 @@ def main():
 
             print(f"\n🧪 Evaluating model: {model_name} on the test set using best weights...")
             model.eval()
-
+            report_base_path = os.path.join(model_results_dir, f'{model_name}_test_eval')
             y_true, y_pred = infer_from_annotation(
                 model=model,
                 class_names=final_class_names,
                 device=device,
                 dataloader=test_loader,
                 save_txt = True,
+                save_path=report_base_path + "_predictions.txt",
             )
 
             if y_true and y_pred:
-                report_base_path = os.path.join(model_results_dir, f'{model_name}_test_eval')
                 report_classification(y_true, y_pred, final_class_names, save_path_base=report_base_path)
             else:
                 print("   ⚠️ Skipping evaluation report generation due to inference issues or empty results.")
