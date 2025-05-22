@@ -768,7 +768,7 @@ def main():
                 device=device,
                 dataloader=test_loader,
                 save_txt = True,
-                save_path=report_base_path + "_predictions.txt",
+                save_txt_path=report_base_path + "_predictions.txt",
             )
 
             if y_true and y_pred:
