@@ -50,7 +50,7 @@ class_names:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - mobilenetv3_large_100.miil_in21k_ft_in1k
+  - focalnet_tiny_lrf.ms_in1k
 
 # --- Training Configuration ---
 training:
