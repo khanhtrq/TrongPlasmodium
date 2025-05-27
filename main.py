@@ -70,6 +70,11 @@ def main():
         optimizer_config = config.get('optimizer', {})
         scheduler_config = config.get('scheduler', {})
         device_config = config.get('device', {})
+        
+        # --- Class Remapping Configuration (NEW) ---
+        class_remapping_config = config.get('class_remapping', {})
+        if class_remapping_config.get('enabled', False):
+            print(f"\n🔄 Class remapping is enabled: {class_remapping_config.get('mapping', {})}")
 
         # --- Training Parameters ---
         dropout_rate = float(training_params.get('dropout_rate', 0.0))  # Ensure dropout_rate is a float
@@ -108,10 +113,16 @@ def main():
         print("   Running on CPU.")
 
     # --- Class Information ---
-    final_class_names = class_names
-    num_classes = len(class_names) if class_names else None
+    # Use remapped class names if remapping is enabled and final_class_names is provided
+    if class_remapping_config.get('enabled', False) and class_remapping_config.get('final_class_names'):
+        final_class_names = class_remapping_config['final_class_names']
+        print(f"\n📋 Using remapped class names: {final_class_names}")
+    else:
+        final_class_names = class_names
+    
+    num_classes = len(final_class_names) if final_class_names else None
     if final_class_names:
-        print(f"\n📋 Class Information (from config):")
+        print(f"\n📋 Class Information:")
         print(f"   Number of classes: {num_classes}")
         print(f"   Class names: {final_class_names}")
     else:
@@ -201,11 +212,11 @@ def main():
                                 return os.path.join(base, p) if p and not os.path.isabs(p) else p
 
                             if ann_train_path:
-                                current_train_dataset = AnnotationDataset(resolve_path(data_dir, ann_train_path), train_root, transform=transform_train, class_names=final_class_names)
+                                current_train_dataset = AnnotationDataset(resolve_path(data_dir, ann_train_path), train_root, transform=transform_train, class_names=final_class_names, class_remapping=class_remapping_config)
                             if ann_val_path:
-                                current_val_dataset = AnnotationDataset(resolve_path(data_dir, ann_val_path), val_root, transform=transform_eval, class_names=final_class_names)
+                                current_val_dataset = AnnotationDataset(resolve_path(data_dir, ann_val_path), val_root, transform=transform_eval, class_names=final_class_names, class_remapping=class_remapping_config)
                             if ann_test_path:
-                                current_test_dataset = AnnotationDataset(resolve_path(data_dir, ann_test_path), test_root, transform=transform_eval, class_names=final_class_names)
+                                current_test_dataset = AnnotationDataset(resolve_path(data_dir, ann_test_path), test_root, transform=transform_eval, class_names=final_class_names, class_remapping=class_remapping_config)
 
                         elif dataset_type == 'imagefolder':
                             imgf_root = d_cfg.get('imagefolder_root')
@@ -218,7 +229,7 @@ def main():
                             if imgf_train_subdir: # Only proceed if subdir is not None
                                 train_dir = os.path.join(imgf_root, imgf_train_subdir)
                                 if os.path.isdir(train_dir):
-                                    current_train_dataset = ImageFolderWrapper(root=train_dir, transform=transform_train)
+                                    current_train_dataset = ImageFolderWrapper(root=train_dir, transform=transform_train, class_remapping=class_remapping_config)
                                     print(f"     Loaded ImageFolder train from: {train_dir}")
                                 else:
                                     warnings.warn(f"     ImageFolder train directory not found: {train_dir} (from source {i+1})")
@@ -228,7 +239,7 @@ def main():
                             if imgf_val_subdir: # Only proceed if subdir is not None
                                 val_dir = os.path.join(imgf_root, imgf_val_subdir)
                                 if os.path.isdir(val_dir):
-                                    current_val_dataset = ImageFolderWrapper(root=val_dir, transform=transform_eval)
+                                    current_val_dataset = ImageFolderWrapper(root=val_dir, transform=transform_eval, class_remapping=class_remapping_config)
                                     print(f"     Loaded ImageFolder val from: {val_dir}")
                                 else:
                                     warnings.warn(f"     ImageFolder val directory not found: {val_dir} (from source {i+1})")
@@ -238,7 +249,7 @@ def main():
                             if imgf_test_subdir: # Only proceed if subdir is not None
                                 test_dir = os.path.join(imgf_root, imgf_test_subdir)
                                 if os.path.isdir(test_dir):
-                                    current_test_dataset = ImageFolderWrapper(root=test_dir, transform=transform_eval)
+                                    current_test_dataset = ImageFolderWrapper(root=test_dir, transform=transform_eval, class_remapping=class_remapping_config)
                                     print(f"     Loaded ImageFolder test from: {test_dir}")
                                 else:
                                     warnings.warn(f"     ImageFolder test directory not found: {test_dir} (from source {i+1})")

@@ -7,7 +7,7 @@ import numpy as np
 import warnings
 
 class AnnotationDataset(Dataset):
-    def __init__(self, annotation_file, root_dir, transform=None, class_names=None):
+    def __init__(self, annotation_file, root_dir, transform=None, class_names=None, class_remapping=None):
         """
         Args:
             annotation_file (str): Path to the annotation file (e.g., 'train_annotation.txt').
@@ -17,12 +17,15 @@ class AnnotationDataset(Dataset):
             class_names (list, optional): List of class names in the desired order.
                                           If provided, labels in the annotation file will be
                                           mapped to indices corresponding to this list.
+            class_remapping (dict, optional): Dictionary for class remapping config.
+                                            Expected keys: 'enabled', 'mapping', 'final_class_names'
         """
         self.samples = []
         self.root_dir = root_dir
         self.transform = transform
         self.original_labels = set() # Store labels as read from the file
         self.targets = [] # Final (potentially remapped) label indices
+        self.class_remapping = class_remapping
 
         print(f"🔍 Loading annotations from: {annotation_file}")
         print(f"   Image root directory: {root_dir}")
@@ -59,11 +62,6 @@ class AnnotationDataset(Dataset):
                 continue
 
             full_path = os.path.join(self.root_dir, path)
-            # Optional: Check if file exists here, but can slow down initialization
-            # if not os.path.exists(full_path):
-            #     warnings.warn(f"Image path not found: {full_path} (from line {i+1})")
-            #     continue
-
             self.samples.append((full_path, label))
             self.original_labels.add(label)
 
@@ -73,12 +71,22 @@ class AnnotationDataset(Dataset):
         print(f"   Found {len(self.samples)} samples.")
         print(f"   Original labels found in file: {sorted(list(self.original_labels))}")
 
+        # --- Apply Class Remapping (NEW) ---
+        if self.class_remapping and self.class_remapping.get('enabled', False):
+            self._apply_class_remapping()
+
         # --- Class Name and Label Mapping Logic ---
         unique_original_labels = sorted(list(self.original_labels))
 
         if class_names is not None:
-            self.classes = class_names
-            print(f"   Using provided class names: {self.classes}")
+            # Use remapped class names if available, otherwise use provided class_names
+            if self.class_remapping and self.class_remapping.get('enabled', False) and self.class_remapping.get('final_class_names'):
+                self.classes = self.class_remapping['final_class_names']
+                print(f"   Using remapped class names: {self.classes}")
+            else:
+                self.classes = class_names
+                print(f"   Using provided class names: {self.classes}")
+            
             num_expected_classes = len(self.classes)
 
             # Create mapping from original label in file to the index in class_names
@@ -146,6 +154,31 @@ class AnnotationDataset(Dataset):
         self.imgs = self.samples # List of (image_path, final_label) tuples
         self.loader = lambda path: Image.open(path).convert('RGB') # Default image loader
 
+    def _apply_class_remapping(self):
+        """Apply class remapping to samples and update original_labels."""
+        mapping = self.class_remapping.get('mapping', {})
+        if not mapping:
+            print("   No class mapping provided, skipping remapping.")
+            return
+
+        print(f"   Applying class remapping: {mapping}")
+        
+        # Apply remapping to samples
+        remapped_samples = []
+        new_original_labels = set()
+        
+        for img_path, label in self.samples:
+            # Apply remapping if label exists in mapping
+            new_label = mapping.get(label, label)
+            remapped_samples.append((img_path, new_label))
+            new_original_labels.add(new_label)
+        
+        self.samples = remapped_samples
+        self.original_labels = new_original_labels
+        
+        print(f"   After remapping - labels found: {sorted(list(self.original_labels))}")
+        print(f"   Remapped {len(self.samples)} samples.")
+
     def __len__(self):
         return len(self.samples)
 
@@ -178,16 +211,19 @@ class ImageFolderWrapper(datasets.ImageFolder):
     A wrapper around torchvision.datasets.ImageFolder to provide
     consistent attributes with AnnotationDataset (e.g., .imgs, .loader).
     """
-    def __init__(self, root, transform=None, target_transform=None, loader=datasets.folder.default_loader, is_valid_file=None):
+    def __init__(self, root, transform=None, target_transform=None, loader=datasets.folder.default_loader, is_valid_file=None, class_remapping=None):
         print(f"🔍 Loading ImageFolder from: {root}")
         super().__init__(root, transform=transform, target_transform=target_transform, loader=loader, is_valid_file=is_valid_file)
+        
+        self.class_remapping = class_remapping
+        
+        # Apply class remapping if enabled
+        if self.class_remapping and self.class_remapping.get('enabled', False):
+            self._apply_class_remapping()
+        
         # Add compatibility attributes
-        # self.samples is already defined by ImageFolder as list of (filepath, class_index)
         self.imgs = self.samples # Alias for compatibility
-        # self.targets is already defined by ImageFolder as list of class_indices
-        # self.classes is already defined by ImageFolder as list of class names
-        # self.loader is passed in __init__ and stored
-
+        
         if not self.samples:
             warnings.warn(f"⚠️ No image files found in {root}. Check the directory structure and image extensions.")
         else:
@@ -196,7 +232,39 @@ class ImageFolderWrapper(datasets.ImageFolder):
             min_target, max_target = min(self.targets), max(self.targets)
             print(f"   Target labels range: [{min_target}, {max_target}]")
 
-    # __getitem__ and __len__ are inherited from ImageFolder
+    def _apply_class_remapping(self):
+        """Apply class remapping to ImageFolder samples and targets."""
+        mapping = self.class_remapping.get('mapping', {})
+        if not mapping:
+            print("   No class mapping provided for ImageFolder, skipping remapping.")
+            return
+
+        print(f"   Applying class remapping to ImageFolder: {mapping}")
+        
+        # Apply remapping to samples and targets
+        remapped_samples = []
+        remapped_targets = []
+        
+        for (img_path, label), target in zip(self.samples, self.targets):
+            new_label = mapping.get(label, label)
+            new_target = mapping.get(target, target)
+            remapped_samples.append((img_path, new_label))
+            remapped_targets.append(new_target)
+        
+        self.samples = remapped_samples
+        self.targets = remapped_targets
+        
+        # Update class names if provided
+        if self.class_remapping.get('final_class_names'):
+            # Get unique remapped labels to determine new classes
+            unique_labels = sorted(set(self.targets))
+            if len(unique_labels) == len(self.class_remapping['final_class_names']):
+                self.classes = self.class_remapping['final_class_names']
+                print(f"   Updated class names to: {self.classes}")
+            else:
+                warnings.warn(f"⚠️ Mismatch between unique remapped labels ({len(unique_labels)}) and final_class_names ({len(self.class_remapping['final_class_names'])})")
+        
+        print(f"   After remapping - unique targets: {sorted(set(self.targets))}")
 
 # --- New Combined Dataset Wrapper ---
 class CombinedDataset(Dataset):
