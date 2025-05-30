@@ -192,8 +192,7 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam'):
     try:
         cam = CAMClass(
             model=model,
-            target_layers=target_layers,
-            use_cuda=torch.cuda.is_available()
+            target_layers=target_layers
         )
         print(f"   ✅ Successfully initialized {cam_algorithm.upper()}")
     except Exception as e:
