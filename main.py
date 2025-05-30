@@ -21,6 +21,11 @@ from src.training import train_model, train_classifier_only  # MODIFIED: Import 
 from src.evaluation import infer_from_annotation, report_classification
 from src.gradcam import generate_and_save_gradcam_per_class
 from src.loss import FocalLoss, F1Loss, get_criterion  # MODIFIED: Removed unused compute_class_weights
+# Advanced augmentation imports
+from src.augment import (
+    create_augmentation_strategy,
+    get_timm_transform
+)
 from src.visualization import (
     plot_sample_images_per_class,
     plot_training_curves,
@@ -201,15 +206,29 @@ def main():
                 temp_num_classes = num_classes if num_classes is not None else 1
                 model, input_size, model_specific_transform, model_config = initialize_model(
                     model_name, num_classes=temp_num_classes, use_pretrained=True, feature_extract=False, drop_rate=dropout_rate
-                )
-
-                # --- Determine Transform to Use ---
-                if model_specific_transform:
+                )                # --- Determine Transform to Use ---
+                # Check if augmentation is enabled in config
+                aug_config = config.get('augmentation', {})
+                if aug_config.get('enabled', False):
+                    # Use advanced augmentation strategy
+                    print(f"   🎨 Using ADVANCED augmentation strategy: {aug_config.get('strategy', 'light')}")
+                    aug_strategy = create_augmentation_strategy(config, model_config)
+                    transform_train = aug_strategy.get_train_transform()
+                    transform_eval = aug_strategy.get_eval_transform()
+                    print(f"   📈 Train augmentation: {len(transform_train.transforms)} steps")
+                    print(f"   📊 Eval transforms: {len(transform_eval.transforms)} steps")
+                    
+                    # Print augmentation details
+                    print(f"   🔧 Augmentation details:")
+                    print(f"      Strategy: {aug_strategy.strategy}")
+                    print(f"      Input size: {aug_strategy.input_size}")
+                    print(f"      Interpolation: {aug_strategy.interpolation}")
+                elif model_specific_transform:
+                    # Use timm's recommended transforms if augmentation is disabled
                     transform_train = model_specific_transform
                     transform_eval = model_specific_transform
-                    print(f"   Using TIMM's recommended transforms (input size: {input_size}x{input_size}).")
+
                 else:
-                    print(f"   Using DEFAULT transforms (input size: {input_size}x{input_size}).")
                     transform_train = transforms.Compose([
                         transforms.Resize((input_size, input_size)),
                         transforms.RandomHorizontalFlip(),
@@ -223,6 +242,36 @@ def main():
                         transforms.Normalize(mean=model_config['mean'], std=model_config['std'])
                     ])
 
+                # Print transforms being used
+                print("\n" + "="*60)
+                print("TRANSFORMS CONFIGURATION")
+                print("="*60)
+                print(f"📊 Model: {model_name}")
+                print(f"🖼️  Input size: {input_size}x{input_size}")
+                print(f"🔧 Augmentation enabled: {aug_config.get('enabled', False)}")
+                print(f"📦 Using model-specific transform: {model_specific_transform is not None}")
+                
+                print("\n🏋️  TRAINING TRANSFORMS:")
+                if hasattr(transform_train, 'transforms'):
+                    for i, t in enumerate(transform_train.transforms, 1):
+                        print(f"   {i}. {t}")
+                else:
+                    print(f"   Single transform: {transform_train}")
+                
+                print("\n🔍 EVALUATION TRANSFORMS:")
+                if hasattr(transform_eval, 'transforms'):
+                    for i, t in enumerate(transform_eval.transforms, 1):
+                        print(f"   {i}. {t}")
+                else:
+                    print(f"   Single transform: {transform_eval}")
+                
+                if aug_config.get('enabled', False):
+                    print(f"\n⚙️  AUGMENTATION DETAILS:")
+                    print(f"   Strategy: {aug_config.get('strategy', 'basic')}")
+                    print(f"   Config: {aug_config}")
+                
+                print("="*60 + "\n")
+                
                 # --- Load Multiple Datasets ---
                 print("\n⏳ Loading datasets from configured sources...")
                 train_datasets_list = []
@@ -307,7 +356,8 @@ def main():
                                         print(f"   Re-initializing model '{model_name}' with inferred {num_classes} classes...")
                                         del model; gc.collect(); torch.cuda.empty_cache()
                                         model, input_size, model_specific_transform, model_config = initialize_model(model_name, num_classes=num_classes, use_pretrained=True, feature_extract=False, drop_rate=dropout_rate)
-                                        if model_specific_transform: transform_train = transform_eval = model_specific_transform
+                                        if model_specific_transform: 
+                                            transform_train = transform_eval = model_specific_transform
                                         else:
                                             transform_train = transforms.Compose([transforms.Resize((input_size, input_size)), transforms.RandomHorizontalFlip(), transforms.RandomRotation(10), transforms.ToTensor(), transforms.Normalize(mean=model_config['mean'], std=model_config['std'])])
                                             transform_eval = transforms.Compose([transforms.Resize((input_size, input_size)), transforms.ToTensor(), transforms.Normalize(mean=model_config['mean'], std=model_config['std'])])
@@ -394,8 +444,7 @@ def main():
 
                 train_loader = DataLoader(final_train_dataset, batch_size=current_batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0, drop_last=True)
                 val_loader = DataLoader(final_val_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0, drop_last=True) if final_val_dataset else None
-                test_loader = DataLoader(final_test_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0, drop_last=True) if final_test_dataset else None
-
+                test_loader = DataLoader(final_test_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0, drop_last=True) if final_test_dataset else None                
                 print(f"\n📦 DataLoaders created (Batch size: {current_batch_size}, Workers: {num_workers})")
                 dataloaders = {'train': train_loader}
                 if val_loader: dataloaders['val'] = val_loader
@@ -538,7 +587,7 @@ def main():
                         optimizer,
                         step_size=scheduler_config.get('step_size', 7),
                         gamma=scheduler_config.get('gamma', 0.1)
-                    )
+                    )                
                 else:
                     warnings.warn(f"Unsupported scheduler type: {scheduler_type}. Defaulting to StepLR.")
                     scheduler = optim.lr_scheduler.StepLR(
@@ -546,7 +595,7 @@ def main():
                         step_size=7,
                         gamma=0.1
                     )
-
+                
                 print(f"\n🏋️ Starting training for model: {model_name} (Batch Size: {current_batch_size}, Train Ratio: {train_ratio:.2f})...")
                 model_save_path = os.path.join(model_results_dir, f'{model_name}_best.pth')
                 log_save_path = os.path.join(model_results_dir, f'{model_name}_training_log.csv')
@@ -564,8 +613,7 @@ def main():
                     patience=patience,
                     use_amp=use_amp,
                     save_path=model_save_path,
-                    log_path=log_save_path,
-                    clip_grad_norm=clip_grad_norm,
+                    log_path=log_save_path,                    clip_grad_norm=clip_grad_norm,
                     train_ratio=train_ratio
                 )
 
