@@ -78,20 +78,29 @@ def find_target_layers_pytorch_gradcam(model, model_name=None):
         model_type = model.__class__.__name__.lower()
     
     print(f"   Detected model type: {model_type}")
-    
-    # Vision Transformer models (DeiT, ViT, etc.)
+      # Vision Transformer models (DeiT, ViT, etc.)
     if any(keyword in model_type for keyword in ['deit', 'vit', 'vision_transformer']):
         print("   🤖 Handling Vision Transformer architecture...")
         
         if hasattr(model, 'blocks') and len(model.blocks) > 0:
-            # Use the last transformer block's layer norm
+            # For ViT, try multiple options for better results
             last_block = model.blocks[-1]
-            if hasattr(last_block, 'norm1'):
+            
+            # Option 1: Last block's second norm (after MLP)
+            if hasattr(last_block, 'norm2'):
+                target_layers = [last_block.norm2]
+                print(f"   ✅ Selected last block norm2 (post-MLP): {type(last_block.norm2).__name__}")
+            # Option 2: Last block's first norm
+            elif hasattr(last_block, 'norm1'):
                 target_layers = [last_block.norm1]
                 print(f"   ✅ Selected last block norm1: {type(last_block.norm1).__name__}")
             elif hasattr(last_block, 'ln_1'):  # Some ViT variants
                 target_layers = [last_block.ln_1]
                 print(f"   ✅ Selected last block ln_1: {type(last_block.ln_1).__name__}")
+            # Option 3: Try the MLP's final layer
+            elif hasattr(last_block, 'mlp') and hasattr(last_block.mlp, 'fc2'):
+                target_layers = [last_block.mlp.fc2]
+                print(f"   ✅ Selected last block MLP fc2: {type(last_block.mlp.fc2).__name__}")
             else:
                 target_layers = [last_block]
                 print(f"   ✅ Selected entire last block: {type(last_block).__name__}")
@@ -152,7 +161,7 @@ def find_target_layers_pytorch_gradcam(model, model_name=None):
     return target_layers
 
 
-def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam'):
+def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam', debug_layers=False, sample_input=None):
     """
     Setup pytorch-grad-cam with the specified model and target layers.
     
@@ -160,6 +169,8 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam'):
         model: PyTorch model
         target_layers: List of target layers. If None, auto-detect.
         cam_algorithm: Type of CAM algorithm ('gradcam', 'gradcam++', 'scorecam', etc.)
+        debug_layers: Whether to run debug testing for target layers
+        sample_input: Sample input for debugging (1, C, H, W)
     
     Returns:
         tuple: (model, cam_object, compute_function)
@@ -168,8 +179,18 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam'):
     
     model.eval()
     
+    # Debug layers if requested
+    if debug_layers and sample_input is not None:
+        print("🐛 Running target layer debugging...")
+        debug_results, recommended_layer = debug_target_layers(model, sample_input)
+        if recommended_layer and target_layers is None:
+            target_layers = [recommended_layer]
+            print(f"   Using recommended layer from debug")
+    
     if target_layers is None:
         target_layers = find_target_layers_pytorch_gradcam(model)
+    
+    print(f"   🎯 Final target layers: {[type(layer).__name__ for layer in target_layers]}")
     
     # Select CAM algorithm
     cam_algorithms = {
@@ -198,7 +219,6 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam'):
     except Exception as e:
         print(f"   ❌ Failed to initialize {cam_algorithm}: {e}")
         raise
-    
     def compute_gradcam_func(input_tensor, class_idx=None):
         """
         Compute GradCAM for the given input and class.
@@ -211,20 +231,58 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam'):
             numpy array: GradCAM heatmap
         """
         try:
-            # Prepare targets
-            if class_idx is not None:
-                targets = [ClassifierOutputTarget(class_idx)]
-            else:
-                targets = None
+            # Ensure model is in eval mode and requires grad
+            model.eval()
+            input_tensor.requires_grad_(True)
             
-            # Generate CAM
+            # Get model prediction first to understand what's happening
+            with torch.no_grad():
+                outputs = model(input_tensor)
+                predicted_class = outputs.argmax(1).item()
+                confidence = torch.softmax(outputs, dim=1)[0, predicted_class].item()
+                print(f"   🎯 Model prediction: class {predicted_class}, confidence: {confidence:.4f}")
+            
+            # If no class specified, use the predicted class
+            if class_idx is None:
+                class_idx = predicted_class
+                print(f"   📌 Using predicted class {class_idx} for GradCAM")
+            else:
+                print(f"   📌 Using specified class {class_idx} for GradCAM")
+            
+            # Prepare targets
+            targets = [ClassifierOutputTarget(class_idx)]
+            
+            # Generate CAM with detailed logging
+            print(f"   🔥 Computing {cam_algorithm.upper()} for class {class_idx}...")
             grayscale_cam = cam(input_tensor=input_tensor, targets=targets)
             
-            # Return the first image's CAM (batch size assumed to be 1)
-            return grayscale_cam[0] if len(grayscale_cam) > 0 else None
+            if len(grayscale_cam) > 0:
+                cam_result = grayscale_cam[0]
+                
+                # Debug information about CAM values
+                cam_min, cam_max = cam_result.min(), cam_result.max()
+                cam_mean = cam_result.mean()
+                cam_std = cam_result.std()
+                
+                print(f"   📊 CAM statistics:")
+                print(f"      Min: {cam_min:.6f}, Max: {cam_max:.6f}")
+                print(f"      Mean: {cam_mean:.6f}, Std: {cam_std:.6f}")
+                print(f"      Shape: {cam_result.shape}")
+                
+                # Check if CAM is effectively empty
+                if cam_max < 1e-6:
+                    print(f"   ⚠️ WARNING: CAM values are extremely low (max: {cam_max:.6f})")
+                    print(f"   💡 This might indicate wrong target layers or model issues")
+                
+                return cam_result
+            else:
+                print(f"   ❌ GradCAM returned empty result")
+                return None
             
         except Exception as e:
             print(f"   ❌ Error computing GradCAM: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     # Return model, cam object, and compute function
@@ -286,8 +344,22 @@ def show_gradcam_on_image(image_tensor, cam, title="GradCAM", save_path=None, mo
         # Convert tensor to RGB image
         rgb_img = tensor_to_rgb_image(image_tensor, model_config)
         
+        # Normalize CAM to [0, 1] range for better visualization
+        cam_normalized = cam.copy()
+        cam_min, cam_max = cam_normalized.min(), cam_normalized.max()
+        
+        print(f"   📊 Pre-normalization CAM range: [{cam_min:.6f}, {cam_max:.6f}]")
+        
+        if cam_max > cam_min:  # Avoid division by zero
+            cam_normalized = (cam_normalized - cam_min) / (cam_max - cam_min)
+        else:
+            print(f"   ⚠️ WARNING: CAM has constant values ({cam_max:.6f}), creating uniform heatmap")
+            cam_normalized = np.ones_like(cam_normalized) * 0.5
+        
+        print(f"   📊 Post-normalization CAM range: [{cam_normalized.min():.6f}, {cam_normalized.max():.6f}]")
+        
         # Create visualization using pytorch-grad-cam utility
-        visualization = show_cam_on_image(rgb_img, cam, use_rgb=True)
+        visualization = show_cam_on_image(rgb_img, cam_normalized, use_rgb=True, colormap=cv2.COLORMAP_JET)
         
         # Create figure with subplots
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
@@ -297,10 +369,12 @@ def show_gradcam_on_image(image_tensor, cam, title="GradCAM", save_path=None, mo
         axes[0].set_title("Original Image")
         axes[0].axis('off')
         
-        # Heatmap
-        axes[1].imshow(cam, cmap='jet')
-        axes[1].set_title("GradCAM Heatmap")
+        # Heatmap with proper colormap
+        im = axes[1].imshow(cam_normalized, cmap='jet', vmin=0, vmax=1)
+        axes[1].set_title(f"GradCAM Heatmap\n(min: {cam_min:.4f}, max: {cam_max:.4f})")
         axes[1].axis('off')
+        # Add colorbar
+        plt.colorbar(im, ax=axes[1], shrink=0.8)
         
         # Overlay
         axes[2].imshow(visualization)
@@ -319,10 +393,12 @@ def show_gradcam_on_image(image_tensor, cam, title="GradCAM", save_path=None, mo
             
     except Exception as e:
         print(f"❌ Error creating GradCAM visualization: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def generate_and_save_gradcam_per_class(model, dataset, save_dir="gradcam_results", 
-                                      model_config=None, device='cuda', cam_algorithm='gradcam'):
+                                      model_config=None, device='cuda', cam_algorithm='gradcam', debug_layers=False):
     """
     Generate and save GradCAM visualizations using pytorch-grad-cam.
     
@@ -333,6 +409,7 @@ def generate_and_save_gradcam_per_class(model, dataset, save_dir="gradcam_result
         model_config: Model configuration for denormalization
         device: Device to run on
         cam_algorithm: CAM algorithm to use
+        debug_layers: Whether to run debug testing for target layers
     """
     if not hasattr(dataset, 'classes') or not dataset.classes:
         print("❌ Error: Dataset object does not have a 'classes' attribute or it's empty.")
@@ -351,9 +428,20 @@ def generate_and_save_gradcam_per_class(model, dataset, save_dir="gradcam_result
         print("⚠️ No sample images found for GradCAM generation.")
         return
 
+    # Get a sample for debugging if needed
+    sample_input = None
+    if debug_layers and class_to_image:
+        first_class_idx = next(iter(class_to_image.keys()))
+        sample_input = class_to_image[first_class_idx].to(device)
+
     # Setup pytorch-grad-cam
     try:
-        model_cam, gradcam_data, compute_gradcam_func = setup_gradcam(model, cam_algorithm=cam_algorithm)
+        model_cam, gradcam_data, compute_gradcam_func = setup_gradcam(
+            model, 
+            cam_algorithm=cam_algorithm,
+            debug_layers=debug_layers,
+            sample_input=sample_input
+        )
     except Exception as e:
         print(f"❌ Failed to setup pytorch-grad-cam: {e}")
         return
@@ -396,3 +484,86 @@ def generate_and_save_gradcam_per_class(model, dataset, save_dir="gradcam_result
     
     # Clean up
     del gradcam_data['cam_object']
+
+def debug_target_layers(model, sample_input, class_idx=0):
+    """
+    Debug function to test different target layers and find the best one.
+    
+    Args:
+        model: PyTorch model
+        sample_input: Sample input tensor (1, C, H, W)
+        class_idx: Target class for testing
+    
+    Returns:
+        dict: Results for different target layers
+    """
+    print("🔍 Debug: Testing different target layers...")
+    
+    # Get all potential layers
+    potential_layers = []
+    layer_names = []
+    
+    for name, module in model.named_modules():
+        if isinstance(module, (nn.Conv2d, nn.LayerNorm, nn.BatchNorm2d, nn.GroupNorm)):
+            potential_layers.append(module)
+            layer_names.append(f"{name} ({type(module).__name__})")
+    
+    print(f"   Found {len(potential_layers)} potential target layers")
+    
+    results = {}
+    
+    # Test last few layers (most likely to work)
+    test_layers = potential_layers[-min(5, len(potential_layers)):]
+    test_names = layer_names[-min(5, len(layer_names)):]
+    
+    for i, (layer, name) in enumerate(zip(test_layers, test_names)):
+        print(f"   Testing layer {i+1}/{len(test_layers)}: {name}")
+        
+        try:
+            # Try to create GradCAM with this layer
+            cam = GradCAM(model=model, target_layers=[layer])
+            targets = [ClassifierOutputTarget(class_idx)]
+            
+            # Test computation
+            grayscale_cam = cam(input_tensor=sample_input, targets=targets)
+            
+            if len(grayscale_cam) > 0:
+                cam_result = grayscale_cam[0]
+                cam_min, cam_max = cam_result.min(), cam_result.max()
+                cam_mean = cam_result.mean()
+                
+                results[name] = {
+                    'success': True,
+                    'min': cam_min,
+                    'max': cam_max,
+                    'mean': cam_mean,
+                    'layer': layer
+                }
+                
+                print(f"      ✅ Success! CAM range: [{cam_min:.6f}, {cam_max:.6f}], mean: {cam_mean:.6f}")
+            else:
+                results[name] = {'success': False, 'error': 'Empty result'}
+                print(f"      ❌ Failed: Empty result")
+                
+        except Exception as e:
+            results[name] = {'success': False, 'error': str(e)}
+            print(f"      ❌ Failed: {e}")
+    
+    # Find best layer (highest max value that's not too extreme)
+    best_layer = None
+    best_score = -1
+    
+    for name, result in results.items():
+        if result['success']:
+            # Score based on max value (should be > 0 but not too high)
+            score = result['max'] if 0.001 < result['max'] < 10 else 0
+            if score > best_score:
+                best_score = score
+                best_layer = result['layer']
+    
+    if best_layer:
+        print(f"   🏆 Recommended target layer: {best_layer}")
+    else:
+        print(f"   😞 No good target layer found")
+    
+    return results, best_layer

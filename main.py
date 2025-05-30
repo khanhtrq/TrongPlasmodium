@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import pprint  # Import pprint for pretty printing
 import gc  # Import garbage collector
 import math  # For ceiling function
+import random  # For setting Python random seed
 
 from src.data_loader import AnnotationDataset, ImageFolderWrapper, CombinedDataset, collate_fn_skip_error  # Adjusted import
 from src.device_handler import get_device, setup_model_for_training  # MODIFIED: Import setup_model_for_training
@@ -26,6 +27,38 @@ from src.visualization import (
     plot_class_distribution_with_ratios,
     analyze_class_distribution_across_splits
 )
+
+def set_seed(seed):
+    """
+    Set seed for reproducibility across all random number generators.
+    
+    Args:
+        seed (int): Random seed value
+    """
+    print(f"🎲 Setting seed to {seed} for reproducibility...")
+    
+    # Python random module
+    random.seed(seed)
+    
+    # NumPy random module
+    np.random.seed(seed)
+    
+    # PyTorch random module
+    torch.manual_seed(seed)
+    
+    # PyTorch CUDA random module (if available)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        # Additional settings for deterministic behavior on CUDA
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    
+    # Set environment variable for additional reproducibility
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    
+    print(f"✅ Seed {seed} has been set for all random number generators.")
+
 
 def load_config(config_path='config.yaml'):
     """Loads YAML configuration file."""
@@ -49,6 +82,10 @@ def main():
     # --- Configuration Loading ---
     config_file = 'config.yaml'
     config = load_config(config_file)
+
+    # --- Set Seed for Reproducibility ---
+    seed = config.get('seed', 42)  # Default to 42 if not specified
+    set_seed(seed)
 
     # --- Print Loaded Configuration for Debugging ---
     print("\n" + "="*20 + " Loaded Configuration " + "="*20)

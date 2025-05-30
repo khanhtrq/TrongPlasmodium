@@ -29,6 +29,9 @@ datasets:
 batch_size: 32
 num_workers: 4 # Adjusted based on typical Kaggle limits
 
+# --- Reproducibility Configuration ---
+seed: 42 # Random seed for reproducible results
+
 # # --- Class Configuration ---
 # class_names:
 #   - "Ring"
@@ -69,6 +72,25 @@ model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
   - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
+
+# --- Data Augmentation Configuration ---
+augmentation:
+  enabled: false                     # Enable/disable augmentation
+  strategy: 'light'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
+  auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
+  randaugment_magnitude: 9          # RandAugment magnitude (0-30)
+  randaugment_num_ops: 2            # Number of RandAugment operations per image
+  mixup_alpha: 0.2                  # MixUp alpha parameter (0 = disabled)
+  cutmix_alpha: 1.0                 # CutMix alpha parameter (0 = disabled)
+  mixup_cutmix_prob: 1.0           # Probability of applying MixUp/CutMix
+  switch_prob: 0.5                  # Probability of switching between MixUp and CutMix
+  random_erase_prob: 0.25           # Random erasing probability
+  label_smoothing: 0.1              # Label smoothing factor
+  # Advanced settings (only for 'heavy' and 'extreme' strategies)
+  use_timm_auto_augment: true       # Use timm's AutoAugment implementation
+  color_jitter: 0.4                 # Color jitter strength
+  scale_range: [0.7, 1.0]           # Random resized crop scale range
+  ratio_range: [0.8, 1.2]           # Random resized crop aspect ratio range
 
 # --- Training Configuration ---
 training:
