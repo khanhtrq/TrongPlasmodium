@@ -83,24 +83,22 @@ def find_target_layers_pytorch_gradcam(model, model_name=None):
         print("   🤖 Handling Vision Transformer architecture...")
         
         if hasattr(model, 'blocks') and len(model.blocks) > 0:
-            # For ViT, try multiple options for better results
+            # For ViT, try multiple blocks for better results
             last_block = model.blocks[-1]
+            second_last_block = model.blocks[-2] if len(model.blocks) > 1 else None
             
-            # Option 1: Last block's second norm (after MLP)
+            # Option 1: Last block's norm layers
+            target_candidates = []
             if hasattr(last_block, 'norm2'):
-                target_layers = [last_block.norm2]
-                print(f"   ✅ Selected last block norm2 (post-MLP): {type(last_block.norm2).__name__}")
-            # Option 2: Last block's first norm
-            elif hasattr(last_block, 'norm1'):
-                target_layers = [last_block.norm1]
-                print(f"   ✅ Selected last block norm1: {type(last_block.norm1).__name__}")
-            elif hasattr(last_block, 'ln_1'):  # Some ViT variants
-                target_layers = [last_block.ln_1]
-                print(f"   ✅ Selected last block ln_1: {type(last_block.ln_1).__name__}")
-            # Option 3: Try the MLP's final layer
-            elif hasattr(last_block, 'mlp') and hasattr(last_block.mlp, 'fc2'):
-                target_layers = [last_block.mlp.fc2]
-                print(f"   ✅ Selected last block MLP fc2: {type(last_block.mlp.fc2).__name__}")
+                target_candidates.append(last_block.norm2)
+            if hasattr(last_block, 'norm1'):
+                target_candidates.append(last_block.norm1)
+            if second_last_block and hasattr(second_last_block, 'norm2'):
+                target_candidates.append(second_last_block.norm2)
+                
+            if target_candidates:
+                target_layers = target_candidates[:2]  # Use top 2 candidates
+                print(f"   ✅ Selected ViT norm layers: {[type(layer).__name__ for layer in target_layers]}")
             else:
                 target_layers = [last_block]
                 print(f"   ✅ Selected entire last block: {type(last_block).__name__}")
@@ -109,15 +107,20 @@ def find_target_layers_pytorch_gradcam(model, model_name=None):
     elif 'resnet' in model_type:
         print("   🤖 Handling ResNet architecture...")
         if hasattr(model, 'layer4') and len(model.layer4) > 0:
+            # Try both last and second-to-last layers
             target_layers = [model.layer4[-1]]
-            print(f"   ✅ Selected layer4[-1]: {type(model.layer4[-1]).__name__}")
+            if len(model.layer4) > 1:
+                target_layers.append(model.layer4[-2])
+            print(f"   ✅ Selected ResNet layers: {[type(layer).__name__ for layer in target_layers]}")
     
-    # EfficientNet models
+    # EfficientNet models  
     elif 'efficientnet' in model_type:
         print("   🤖 Handling EfficientNet architecture...")
-        if hasattr(model, 'features'):
+        if hasattr(model, 'features') and len(model.features) > 0:
             target_layers = [model.features[-1]]
-            print(f"   ✅ Selected features[-1]: {type(model.features[-1]).__name__}")
+            if len(model.features) > 1:
+                target_layers.append(model.features[-2])
+            print(f"   ✅ Selected EfficientNet features: {[type(layer).__name__ for layer in target_layers]}")
         elif hasattr(model, 'conv_head'):
             target_layers = [model.conv_head]
             print(f"   ✅ Selected conv_head: {type(model.conv_head).__name__}")
@@ -131,24 +134,31 @@ def find_target_layers_pytorch_gradcam(model, model_name=None):
     
     # Generic fallback
     if not target_layers:
-        print("   🔍 Using generic fallback to find target layers...")
+        print("   🔍 Using enhanced generic fallback to find target layers...")
         
-        # Look for the last convolutional or normalization layer
-        last_conv = None
-        last_norm = None
+        # Look for the last few layers of different types
+        conv_layers = []
+        norm_layers = []
+        activation_layers = []
         
         for name, module in model.named_modules():
             if isinstance(module, nn.Conv2d):
-                last_conv = module
+                conv_layers.append(module)
             elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d, nn.GroupNorm)):
-                last_norm = module
+                norm_layers.append(module)
+            elif isinstance(module, (nn.ReLU, nn.GELU, nn.SiLU)):
+                activation_layers.append(module)
         
-        if last_conv:
-            target_layers = [last_conv]
-            print(f"   ✅ Fallback: Selected last Conv2d layer")
-        elif last_norm:
-            target_layers = [last_norm]
-            print(f"   ✅ Fallback: Selected last normalization layer")
+        # Prefer the last normalization layers, then conv layers
+        if norm_layers:
+            target_layers = norm_layers[-2:] if len(norm_layers) > 1 else [norm_layers[-1]]
+            print(f"   ✅ Fallback: Selected last normalization layers")
+        elif conv_layers:
+            target_layers = conv_layers[-2:] if len(conv_layers) > 1 else [conv_layers[-1]]
+            print(f"   ✅ Fallback: Selected last conv layers")
+        elif activation_layers:
+            target_layers = activation_layers[-2:] if len(activation_layers) > 1 else [activation_layers[-1]]
+            print(f"   ✅ Fallback: Selected last activation layers")
     
     if not target_layers:
         print("   ❌ Could not find suitable target layers!")
@@ -177,7 +187,14 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam', debug_laye
     """
     print(f"🔥 Setting up pytorch-grad-cam with algorithm: {cam_algorithm}")
     
-    model.eval()
+    # CRITICAL: Set model to training mode for proper gradient computation
+    model.train()
+    
+    # CRITICAL: Ensure all parameters require gradients
+    for param in model.parameters():
+        param.requires_grad_(True)
+    
+    print(f"   ✅ Model set to training mode with gradients enabled")
     
     # Debug layers if requested
     if debug_layers and sample_input is not None:
@@ -231,16 +248,21 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam', debug_laye
             numpy array: GradCAM heatmap
         """
         try:
-            # Ensure model is in eval mode and requires grad
-            model.eval()
+            # CRITICAL: Ensure model is in training mode for gradient computation
+            model.train()
+            
+            # CRITICAL: Ensure input requires gradients
+            input_tensor = input_tensor.detach().clone()
             input_tensor.requires_grad_(True)
             
             # Get model prediction first to understand what's happening
             with torch.no_grad():
+                model.eval()  # Temporarily switch to eval for prediction
                 outputs = model(input_tensor)
                 predicted_class = outputs.argmax(1).item()
                 confidence = torch.softmax(outputs, dim=1)[0, predicted_class].item()
                 print(f"   🎯 Model prediction: class {predicted_class}, confidence: {confidence:.4f}")
+                model.train()  # Switch back to training mode
             
             # If no class specified, use the predicted class
             if class_idx is None:
@@ -272,7 +294,23 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam', debug_laye
                 # Check if CAM is effectively empty
                 if cam_max < 1e-6:
                     print(f"   ⚠️ WARNING: CAM values are extremely low (max: {cam_max:.6f})")
-                    print(f"   💡 This might indicate wrong target layers or model issues")
+                    print(f"   💡 This might indicate wrong target layers or gradient issues")
+                    
+                    # Try alternative target layers
+                    print(f"   🔄 Attempting alternative target layer detection...")
+                    alternative_layers = find_alternative_target_layers(model)
+                    if alternative_layers:
+                        print(f"   🔄 Retrying with alternative layers: {[type(layer).__name__ for layer in alternative_layers]}")
+                        # Recreate CAM with alternative layers
+                        CAMClass = cam_algorithms[cam_algorithm]
+                        alt_cam = CAMClass(model=model, target_layers=alternative_layers)
+                        alt_grayscale_cam = alt_cam(input_tensor=input_tensor, targets=targets)
+                        if len(alt_grayscale_cam) > 0:
+                            alt_cam_result = alt_grayscale_cam[0]
+                            alt_cam_max = alt_cam_result.max()
+                            if alt_cam_max > cam_max:
+                                print(f"   ✅ Alternative layers produced better result (max: {alt_cam_max:.6f})")
+                                return alt_cam_result
                 
                 return cam_result
             else:
@@ -289,6 +327,21 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam', debug_laye
     gradcam_data = {'cam_object': cam, 'target_layers': target_layers}
     
     return model, gradcam_data, compute_gradcam_func
+
+
+def find_alternative_target_layers(model):
+    """Find alternative target layers when the primary ones fail."""
+    alternative_layers = []
+    
+    # Look for different types of layers that might work better
+    for name, module in model.named_modules():
+        if isinstance(module, (nn.ReLU, nn.GELU, nn.SiLU)):
+            alternative_layers.append(module)
+        elif isinstance(module, nn.AdaptiveAvgPool2d):
+            alternative_layers.append(module)
+    
+    # Return the last few activation layers
+    return alternative_layers[-2:] if len(alternative_layers) > 1 else alternative_layers[-1:] if alternative_layers else []
 
 
 def tensor_to_rgb_image(tensor, model_config=None):

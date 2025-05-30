@@ -4,9 +4,9 @@ data_dir: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification
 # --- Datasets Configuration (List) ---
 datasets:
   - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
-    annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
-    annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
-    annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
+    annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_7classes.txt'
+    annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_7classes.txt' # Use original val
+    annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_7classes.txt' # Use original test
     annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
 
   # - type: 'annotation' # First dataset definition (e.g., SMOTE for training)
@@ -48,6 +48,7 @@ class_names:
   - "rbc_parasitized_F_G1_or_G2"
   - "rbc_unparasitized"
   - "rbc_unparasitized_artefact_dead_kernel"
+  - "rbc_difficult" # New class for difficult-to-classify images
 
 # --- Class Remapping Configuration (NEW) ---
 class_remapping:
@@ -76,7 +77,7 @@ model_names:
 
 # --- Data Augmentation Configuration ---
 augmentation:
-  enabled: true                      # Enable/disable augmentation
+  enabled: false                      # Enable/disable augmentation
   strategy: 'extreme'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
   auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
   randaugment_magnitude: 9          # RandAugment magnitude (0-30)

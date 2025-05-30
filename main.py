@@ -874,16 +874,43 @@ def main():
 
             print(f"\n🔥 Generating Grad-CAM visualizations for: {model_name}")
             gradcam_save_dir = os.path.join(model_results_dir, "gradcam_visualizations")
-            # ensure parameter can draw by gradcam
-            for p in model.parameters():
-                p.requires_grad = True
+            
+            # CRITICAL: Properly prepare model for GradCAM
+            print(f"🔧 Preparing model for GradCAM visualization...")
+            
+            # Load the best model weights
+            best_model_path = os.path.join(model_results_dir, f'{model_name}_best.pth')
+            if os.path.exists(best_model_path):
+                print(f"   📂 Loading best model weights from: {best_model_path}")
+                try:
+                    # Load state dict properly
+                    checkpoint = torch.load(best_model_path, map_location=device)
+                    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                        model.load_state_dict(checkpoint['model_state_dict'])
+                    else:
+                        model.load_state_dict(checkpoint)
+                    print(f"   ✅ Model weights loaded successfully")
+                except Exception as e:
+                    print(f"   ⚠️ Could not load model weights: {e}. Using current model state.")
+            else:
+                print(f"   ⚠️ Best model file not found: {best_model_path}. Using current model state.")
+            
+            # CRITICAL: Set model to training mode and enable gradients for GradCAM
+            model.train()
+            for param in model.parameters():
+                param.requires_grad_(True)
+            
+            print(f"   ✅ Model set to training mode with gradients enabled for GradCAM")
+            
             try:
                 generate_and_save_gradcam_per_class(
                     model=model,
                     dataset=final_test_dataset,
                     save_dir=gradcam_save_dir,
                     model_config=model_config,
-                    device=device
+                    device=device,
+                    cam_algorithm='gradcam',  # You can make this configurable
+                    debug_layers=True  # Enable debugging for better layer selection
                 )
             except Exception as e:
                 print(f"⚠️ Could not generate Grad-CAM for {model_name}: {e}")
