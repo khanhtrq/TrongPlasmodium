@@ -77,7 +77,7 @@ model_names:
 # --- Data Augmentation Configuration ---
 augmentation:
   enabled: true                      # Enable/disable augmentation
-  strategy: 'medium'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
+  strategy: 'extreme'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
   auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
   randaugment_magnitude: 9          # RandAugment magnitude (0-30)
   randaugment_num_ops: 2            # Number of RandAugment operations per image
