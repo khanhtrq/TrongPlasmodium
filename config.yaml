@@ -72,13 +72,13 @@ class_remapping:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - mobilevitv2_175.cvnets_in22k_ft_in1k
+  - mobilenetv3_large_100.miil_in21k_ft_in1k
   # - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
 
 # --- Data Augmentation Configuration ---
 augmentation:
-  enabled: false                      # Enable/disable augmentation
-  strategy: 'medium'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
+  enabled: true                      # Enable/disable augmentation
+  strategy: 'light'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
   auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
   randaugment_magnitude: 9          # RandAugment magnitude (0-30)
   randaugment_num_ops: 2            # Number of RandAugment operations per image

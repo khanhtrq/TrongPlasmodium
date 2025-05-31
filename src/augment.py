@@ -273,21 +273,29 @@ class TimmAugmentationStrategy:
         """Light augmentation with basic geometric transforms."""
         return transforms.Compose([
             transforms.RandomResizedCrop(
-                self.input_size, 
-                scale=(0.8, 1.0),
-                ratio=(0.9, 1.1),
+                self.input_size,
+                scale=(0.7, 1.0),
+                ratio=(0.8, 1.2),
                 interpolation=self._get_interpolation()
             ),
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomRotation(degrees=10),
-            transforms.ColorJitter(
-                brightness=0.02,
-                contrast=0.02,
-                saturation=0.0,
-                hue=0.0
+            transforms.RandomVerticalFlip(p=0.5),
+            transforms.RandomRotation(degrees=30),            
+            transforms.RandomAffine(
+                degrees=0,
+                translate=(0.05, 0.05),
+                scale=(0.95, 1.05),
+                shear=0
             ),
             transforms.ToTensor(),
-            transforms.Normalize(mean=self.mean, std=self.std)
+            transforms.Normalize(mean=self.mean, std=self.std),
+            transforms.RandomErasing(
+                p=0.1,
+                scale=(0.02, 0.05),
+                ratio=(0.3, 3.3),
+                value=0
+            ),
+
         ])
     
     def _get_medium_transform(self):
