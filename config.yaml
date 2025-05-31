@@ -72,8 +72,8 @@ class_remapping:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - mobilenetv3_large_100.miil_in21k_ft_in1k
-  # - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
+  # - mobilenetv3_large_100.miil_in21k_ft_in1k
+  - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
 
 # --- Data Augmentation Configuration ---
 augmentation:
