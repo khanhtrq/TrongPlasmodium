@@ -315,7 +315,15 @@ class TimmAugmentationStrategy:
                 scale=(0.02, 0.1),
                 ratio=(0.3, 3.3),
                 value=0
-            )
+            ),
+            transforms.RandomPerspective(
+                distortion_scale=0.1,
+                p=0.2,
+            ),
+            transforms.RandomAdjustSharpness(
+                sharpness_factor=0.5,
+                p=0.2
+            ),
         ])
     
     def _get_heavy_transform(self):

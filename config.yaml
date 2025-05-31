@@ -52,7 +52,7 @@ class_names:
 
 # --- Class Remapping Configuration (NEW) ---
 class_remapping:
-  enabled: true                    # Set to true to enable class remapping
+  enabled: false                    # Set to true to enable class remapping
   mapping:                         # Dictionary mapping: original_class_index -> new_class_index
     5: 4                          # Map class 5 to class 4 (merge artefact into unparasitized)
   # Example of more complex remapping:
