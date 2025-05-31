@@ -54,7 +54,7 @@ class_names:
 class_remapping:
   enabled: true                    # Set to true to enable class remapping
   mapping:                         # Dictionary mapping: original_class_index -> new_class_index
-    5: 5                          # Map class 5 to class 4 (merge artefact into unparasitized)
+    5: 4                          # Map class 5 to class 4 (merge artefact into unparasitized)
   # Example of more complex remapping:
   # mapping:
   #   1: 0    # Map class 1 to class 0
@@ -66,7 +66,7 @@ class_remapping:
     - "rbc_parasitized_F_TA" 
     - "rbc_parasitized_F_S1_or_S2"
     - "rbc_parasitized_F_G1_or_G2"
-    # - "rbc_unparasitized_combined"  # Combined class
+    - "rbc_unparasitized_combined"  # Combined class
 
 # --- Model Configuration ---
 model_names:
