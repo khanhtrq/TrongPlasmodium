@@ -1,14 +1,4 @@
-"""
-Advanced Image Augmentation Module using timm library
-====================================================
 
-This module provides comprehensive image augmentation capabilities using timm's
-advanced augmentation techniques including AutoAugment, RandAugment, TrivialAugment,
-MixUp, CutMix, and more.
-
-Author: GitHub Copilot
-Date: May 2025
-"""
 
 import random
 import warnings
@@ -310,8 +300,9 @@ class TimmAugmentationStrategy:
                 interpolation=self._get_interpolation()
             ),
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomVerticalFlip(p=0.2),
-            transforms.RandomRotation(degrees=15),            transforms.RandomAffine(
+            transforms.RandomVerticalFlip(p=0.5),
+            transforms.RandomRotation(degrees=30),            
+            transforms.RandomAffine(
                 degrees=0,
                 translate=(0.05, 0.05),
                 scale=(0.95, 1.05),
@@ -321,9 +312,9 @@ class TimmAugmentationStrategy:
             transforms.Normalize(mean=self.mean, std=self.std),
             transforms.RandomErasing(
                 p=0.1,
-                scale=(0.02, 0.2),
+                scale=(0.02, 0.1),
                 ratio=(0.3, 3.3),
-                value='random'
+                value=0
             )
         ])
     
@@ -413,6 +404,8 @@ class TimmAugmentationStrategy:
                 re_count=1,
                 re_num_splits=0,
                 separate=False,
+                color_jitter_prob= 0,
+                grayscale_prob= 0,
             )
             return transform
         except Exception as e:
@@ -517,8 +510,8 @@ class RandAugmentTransform:
         self.num_magnitude_bins = num_magnitude_bins
           # Define available operations (geometric and shape-only)
         self.operations = [
-            self._auto_contrast,
-            self._equalize,
+            # self._auto_contrast,
+            # self._equalize,
             # self._invert,  # Removed - color inversion
             self._rotate,
             self._posterize,

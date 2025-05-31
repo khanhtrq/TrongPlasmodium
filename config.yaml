@@ -52,9 +52,9 @@ class_names:
 
 # --- Class Remapping Configuration (NEW) ---
 class_remapping:
-  enabled: false                    # Set to true to enable class remapping
+  enabled: true                    # Set to true to enable class remapping
   mapping:                         # Dictionary mapping: original_class_index -> new_class_index
-    5: 4                          # Map class 5 to class 4 (merge artefact into unparasitized)
+    5: 5                          # Map class 5 to class 4 (merge artefact into unparasitized)
   # Example of more complex remapping:
   # mapping:
   #   1: 0    # Map class 1 to class 0
@@ -66,7 +66,7 @@ class_remapping:
     - "rbc_parasitized_F_TA" 
     - "rbc_parasitized_F_S1_or_S2"
     - "rbc_parasitized_F_G1_or_G2"
-    - "rbc_unparasitized_combined"  # Combined class
+    # - "rbc_unparasitized_combined"  # Combined class
 
 # --- Model Configuration ---
 model_names:
@@ -82,8 +82,8 @@ augmentation:
   auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
   randaugment_magnitude: 9          # RandAugment magnitude (0-30)
   randaugment_num_ops: 2            # Number of RandAugment operations per image
-  mixup_alpha: 0.2                  # MixUp alpha parameter (0 = disabled)
-  cutmix_alpha: 1.0                 # CutMix alpha parameter (0 = disabled)
+  mixup_alpha: 0                  # MixUp alpha parameter (0 = disabled)
+  cutmix_alpha: 0                 # CutMix alpha parameter (0 = disabled)
   mixup_cutmix_prob: 1.0           # Probability of applying MixUp/CutMix
   switch_prob: 0.5                  # Probability of switching between MixUp and CutMix
   random_erase_prob: 0.25           # Random erasing probability
