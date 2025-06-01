@@ -168,7 +168,8 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
 if __name__ == "__main__":
 
     # --- Test timm model ---
-    model_name_timm = "mobilenetv4_hybrid_medium.e200_r256_in12k_ft_in1k" # Example timm model
+    print(timm.list_models())
+    model_name_timm = "ghostnetv3_100.in1k" # Example timm model
     num_classes_test = 5
     print(f"\n--- Testing timm model: {model_name_timm} ---")
     try:
