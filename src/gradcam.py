@@ -187,14 +187,15 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam', debug_laye
     """
     print(f"🔥 Setting up pytorch-grad-cam with algorithm: {cam_algorithm}")
     
-    # CRITICAL: Set model to training mode for proper gradient computation
-    model.train()
+    # CRITICAL: Use eval mode to avoid BatchNorm issues with single samples
+    # GradCAM will still work because we'll enable gradients explicitly
+    model.eval()
     
-    # CRITICAL: Ensure all parameters require gradients
+    # CRITICAL: Ensure all parameters require gradients for GradCAM computation
     for param in model.parameters():
         param.requires_grad_(True)
     
-    print(f"   ✅ Model set to training mode with gradients enabled")
+    print(f"   ✅ Model set to eval mode with gradients enabled (avoids BatchNorm issues)")
     
     # Debug layers if requested
     if debug_layers and sample_input is not None:
@@ -248,21 +249,19 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam', debug_laye
             numpy array: GradCAM heatmap
         """
         try:
-            # CRITICAL: Ensure model is in training mode for gradient computation
-            model.train()
+            # CRITICAL: Keep model in eval mode to avoid BatchNorm issues
+            model.eval()
             
-            # CRITICAL: Ensure input requires gradients
+            # CRITICAL: Ensure input requires gradients for GradCAM
             input_tensor = input_tensor.detach().clone()
             input_tensor.requires_grad_(True)
             
             # Get model prediction first to understand what's happening
             with torch.no_grad():
-                model.eval()  # Temporarily switch to eval for prediction
                 outputs = model(input_tensor)
                 predicted_class = outputs.argmax(1).item()
                 confidence = torch.softmax(outputs, dim=1)[0, predicted_class].item()
                 print(f"   🎯 Model prediction: class {predicted_class}, confidence: {confidence:.4f}")
-                model.train()  # Switch back to training mode
             
             # If no class specified, use the predicted class
             if class_idx is None:
@@ -276,6 +275,9 @@ def setup_gradcam(model, target_layers=None, cam_algorithm='gradcam', debug_laye
             
             # Generate CAM with detailed logging
             print(f"   🔥 Computing {cam_algorithm.upper()} for class {class_idx}...")
+            
+            # CRITICAL: Ensure model stays in eval mode during CAM computation
+            model.eval()
             grayscale_cam = cam(input_tensor=input_tensor, targets=targets)
             
             if len(grayscale_cam) > 0:

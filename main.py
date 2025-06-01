@@ -718,17 +718,46 @@ def main():
                     print(f"   Classifier Optimizer: {type(optimizer_cls).__name__} with params: {optimizer_cls.defaults}")
 
                     # 3. Scheduler for classifier training
-                    cls_scheduler_config = classifier_train_config.get('scheduler', {})
+                    cls_scheduler_config = classifier_train_config.get('scheduler', scheduler_config)  # Use main scheduler_config as fallback
                     cls_scheduler_type = cls_scheduler_config.get('type', 'ReduceLROnPlateau').lower()
-                    cls_scheduler_params_config = cls_scheduler_config.get('params', {})
                     scheduler_cls = None
-                    if cls_scheduler_type == 'reducelronplateau':
-                        scheduler_cls = optim.lr_scheduler.ReduceLROnPlateau(optimizer_cls, **cls_scheduler_params_config)
+                    if cls_scheduler_type == 'cosineannealinglr':
+                        scheduler_cls = optim.lr_scheduler.CosineAnnealingLR(
+                            optimizer_cls,
+                            T_max=classifier_train_config.get('num_epochs', 10),
+                            eta_min=cls_scheduler_config.get('min_lr', 0)
+                        )
+                    elif cls_scheduler_type == 'reducelronplateau':
+                        # Remove keys not accepted by ReduceLROnPlateau - same as main training
+                        reduce_params = dict(cls_scheduler_config)
+                        reduce_params.pop('type', None)
+                        scheduler_cls = optim.lr_scheduler.ReduceLROnPlateau(
+                            optimizer_cls,
+                            mode=reduce_params.get('mode', 'max'),
+                            factor=reduce_params.get('factor', 0.1),
+                            patience=reduce_params.get('patience', 10),
+                            threshold=reduce_params.get('threshold', 1e-4),
+                            min_lr=reduce_params.get('min_lr', 0),
+                            verbose=True
+                        )
                     elif cls_scheduler_type == 'steplr':
-                        scheduler_cls = optim.lr_scheduler.StepLR(optimizer_cls, **cls_scheduler_params_config)
+                        scheduler_cls = optim.lr_scheduler.StepLR(
+                            optimizer_cls,
+                            step_size=cls_scheduler_config.get('step_size', 7),
+                            gamma=cls_scheduler_config.get('gamma', 0.1)
+                        )
+                    else:
+                        warnings.warn(f"Unsupported classifier scheduler type: {cls_scheduler_type}. Defaulting to ReduceLROnPlateau.")
+                        scheduler_cls = optim.lr_scheduler.ReduceLROnPlateau(
+                            optimizer_cls,
+                            mode='max',
+                            factor=0.1,
+                            patience=10,
+                            verbose=True
+                        )
 
                     if scheduler_cls:
-                        print(f"   Classifier Scheduler: {type(scheduler_cls).__name__} with params: {cls_scheduler_params_config}")
+                        print(f"   Classifier Scheduler: {type(scheduler_cls).__name__} with config: {cls_scheduler_config}")
                     else:
                         print("   Classifier Scheduler: None")
                     
