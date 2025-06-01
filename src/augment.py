@@ -328,10 +328,10 @@ class TimmAugmentationStrategy:
                 distortion_scale=0.1,
                 p=0.2,
             ),
-            transforms.RandomAdjustSharpness(
-                sharpness_factor=0.5,
-                p=0.2
-            ),
+            # transforms.RandomAdjustSharpness(
+            #     sharpness_factor=0.5,
+            #     p=0.2
+            # ),
         ])
     
     def _get_heavy_transform(self):
