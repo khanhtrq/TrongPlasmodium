@@ -1,5 +1,3 @@
-
-
 import random
 import warnings
 import os
@@ -316,22 +314,27 @@ class TimmAugmentationStrategy:
                 scale=(0.95, 1.05),
                 shear=5
             ),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=self.mean, std=self.std),
-            transforms.RandomErasing(
-                p=0.1,
-                scale=(0.02, 0.1),
-                ratio=(0.3, 3.3),
-                value=0
-            ),
             transforms.RandomPerspective(
                 distortion_scale=0.1,
                 p=0.2,
             ),
-            # transforms.RandomAdjustSharpness(
-            #     sharpness_factor=0.5,
-            #     p=0.2
-            # ),
+            transforms.RandomAdjustSharpness(
+                sharpness_factor=2,
+                p=0.5
+            ),
+            transforms.GaussianBlur(
+                kernel_size=(5, 5),
+                sigma=(0.1, 2.0)
+            ),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=self.mean, std=self.std),
+            transforms.RandomErasing(
+                p=0.5,
+                scale=(0.02, 0.1),
+                ratio=(0.3, 3.3),
+                value=0
+            ),
+            
         ])
     
     def _get_heavy_transform(self):
@@ -934,6 +937,15 @@ def test_multiple_augmentations(image_path, strategy='medium', num_samples=9, ou
     axes[0].set_title('Original')
     axes[0].axis('off')
     
+    #hardcode transform for testing - FIXED VERSION
+    # train_transform = transforms.Compose([
+    #     transforms.Resize((224, 224)),
+    #     transforms.RandomAdjustSharpness(sharpness_factor=2, p=0.5),  # Move BEFORE ToTensor
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    #     ])
+        
+    
     # Generate multiple augmented versions
     for i in range(num_samples):
         try:
@@ -994,10 +1006,15 @@ def interactive_augmentation_test():
     print("🎮 Interactive Augmentation Test")
     print("=" * 50)
     
+    default_image_path = r"X:\datn\v2_malaria_full_class_classification\v2_malaria_full_class_classification\train\064\rbc_parasitized_F_S1\cell2.jpg"
     # Get image path from user
     while True:
-        image_path = input("\n📁 Enter the path to your test image: ").strip()
-        if os.path.exists(image_path):
+        image_path = input("\n📁 Enter the path to your test image (or default): ").strip()
+        if not image_path:
+            image_path = default_image_path
+            print(f"Using default image path: {image_path}")
+            break
+        elif os.path.exists(image_path):
             break
         else:
             print("❌ File not found. Please enter a valid image path.")
