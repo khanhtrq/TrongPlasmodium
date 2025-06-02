@@ -72,14 +72,14 @@ class_remapping:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  # - mobilenetv3_large_100.miil_in21k_ft_in1k
-  - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
+  - mobilenetv3_large_100.miil_in21k_ft_in1k
+  # - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
   # - ghostnetv3_100.in1k
 
 # --- Data Augmentation Configuration ---
 augmentation:
   enabled: true                      # Enable/disable augmentation
-  strategy: 'medium'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
+  strategy: 'light'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
   auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
   randaugment_magnitude: 9          # RandAugment magnitude (0-30)
   randaugment_num_ops: 2            # Number of RandAugment operations per image
@@ -140,7 +140,7 @@ criterion_params:
 
 # --- Classifier-Only Training Configuration (NEW SECTION) ---
 classifier_only_training:
-  enabled: false               # Set to true to run this phase, false to skip
+  enabled: true               # Set to true to run this phase, false to skip
   num_epochs: 100              # Number of epochs for classifier fine-tuning
   patience: 20                # Early stopping patience for classifier fine-tuning
   use_amp: False             # Can be different from main training, if desired
@@ -164,10 +164,10 @@ scheduler:
 
   # Optional: Define specific criteria for classifier training
   # If not defined, it might reuse criteria from the main training (depending on main.py logic)
-  criterion_a: focalloss
+  criterion_a: bmcloss
   criterion_a_params:
     # use_class_weights: false # Or true, with weights calculated for this phase if needed
-    gamma: 2.0
+    # gamma: 2.0
     # alpha: 1
   #
   # criterion_b: CrossEntropyLoss # Optional secondary criterion for this phase
