@@ -297,46 +297,41 @@ class TimmAugmentationStrategy:
         ])
     
     def _get_medium_transform(self):
-        """Medium augmentation with more aggressive transforms."""
-        return transforms.Compose([
-            transforms.RandomResizedCrop(
-                self.input_size,
-                scale=(0.7, 1.0),
-                ratio=(0.8, 1.2),
-                interpolation=self._get_interpolation()
-            ),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomVerticalFlip(p=0.5),
-            transforms.RandomRotation(degrees=30),            
-            transforms.RandomAffine(
-                degrees=0,
-                translate=(0.05, 0.05),
-                scale=(0.95, 1.05),
-                shear=5
-            ),
-            transforms.RandomPerspective(
-                distortion_scale=0.1,
-                p=0.2,
-            ),
-            transforms.RandomAdjustSharpness(
-                sharpness_factor=2,
-                p=0.5
-            ),
-            transforms.GaussianBlur(
-                kernel_size=(5, 5),
-                sigma=(0.1, 2.0)
-            ),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=self.mean, std=self.std),
-            transforms.RandomErasing(
-                p=0.5,
-                scale=(0.02, 0.1),
-                ratio=(0.3, 3.3),
-                value=0
-            ),
-            
-        ])
-    
+            """Medium augmentation with more aggressive transforms."""
+            return transforms.Compose([
+                transforms.RandomResizedCrop(
+                    self.input_size,
+                    scale=(0.7, 1.0),
+                    ratio=(0.8, 1.2),
+                    interpolation=self._get_interpolation()
+                ),
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomVerticalFlip(p=0.5),
+                transforms.RandomRotation(degrees=30),        
+                transforms.RandomPerspective(
+                    distortion_scale=0.1,
+                    p=0.2,
+                ),
+                transforms.RandomAdjustSharpness(
+                    sharpness_factor=0.5,
+                    p=0.2
+                ),    
+                transforms.RandomAffine(
+                    degrees=0,
+                    translate=(0.05, 0.05),
+                    scale=(0.95, 1.05),
+                    shear=5
+                ),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=self.mean, std=self.std),
+                transforms.RandomErasing(
+                    p=0.1,
+                    scale=(0.02, 0.1),
+                    ratio=(0.3, 3.3),
+                    value=0
+                ),
+                
+            ])    
     def _get_heavy_transform(self):
         """Heavy augmentation using timm's advanced techniques."""
         if not TIMM_AVAILABLE:

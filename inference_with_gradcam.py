@@ -546,8 +546,8 @@ def main():
     num_classes = len(class_names) if class_names else None
     
     # Model selection (modify these as needed)
-    model_name = "deit3_small_patch16_224.fb_in22k_ft_in1k"  # Change this to your desired model
-    model_checkpoint = r"X:\datn\7cls_results\deit3_small_patch16_224.fb_in22k_ft_in1k\PlasmodiumClassification-1\results_kaggle\deit3_small_patch16_224.fb_in22k_ft_in1k\deit3_small_patch16_224.fb_in22k_ft_in1k_best.pth"
+    model_name = "mobilenetv4_hybrid_medium.ix_e550_r384_in1k"  # Change this to your desired model
+    model_checkpoint = r"X:\datn\seed42\5cls mbnv4 aug\PlasmodiumClassification-1\results_kaggle\mobilenetv4_hybrid_medium.ix_e550_r384_in1k\mobilenetv4_hybrid_medium.ix_e550_r384_in1k_best.pth"
     
     # Check if model checkpoint exists
     if not os.path.exists(model_checkpoint):
