@@ -764,27 +764,38 @@ def main():
                     # 4. Criterion for classifier training
                     # --- BEGIN: Load classifier-only criterion config properly ---
                     # Use classifier_only_training's criterion config if present, else fallback to main
-                    cls_criterion_a_name = classifier_train_config.get('criterion_a', classifier_train_config.get('criterion', None))
-                    if cls_criterion_a_name is None:
-                        cls_criterion_a_name = config.get('criterion_a', config.get('criterion', 'CrossEntropyLoss'))
+                    cls_criterion_a_name = classifier_train_config.get('criterion_a')
+                    if cls_criterion_a_name is None: # Try legacy 'criterion' within classifier_config
+                        cls_criterion_a_name = classifier_train_config.get('criterion')
+                    if cls_criterion_a_name is None: # Fallback to main config's 'criterion_a'
+                        cls_criterion_a_name = config.get('criterion_a')
+                    if cls_criterion_a_name is None: # Fallback to main config's legacy 'criterion'
+                        cls_criterion_a_name = config.get('criterion', 'CrossEntropyLoss') # Default if nothing found
                     cls_criterion_a_name = str(cls_criterion_a_name).lower()
 
                     cls_criterion_a_params = classifier_train_config.get('criterion_a_params')
-                    if cls_criterion_a_params is None:
+                    if cls_criterion_a_params is None: # Try legacy 'criterion_params' within classifier_config
                         cls_criterion_a_params = classifier_train_config.get('criterion_params')
-                    if cls_criterion_a_params is None:
-                        cls_criterion_a_params = config.get('criterion_a_params', config.get('criterion_params', {}))
-                    if cls_criterion_a_params is None:
+                    if cls_criterion_a_params is None: # Fallback to main config's 'criterion_a_params'
+                        cls_criterion_a_params = config.get('criterion_a_params')
+                    if cls_criterion_a_params is None: # Fallback to main config's legacy 'criterion_params'
+                        cls_criterion_a_params = config.get('criterion_params', {}) # Default to empty dict
+                    if cls_criterion_a_params is None: # Ensure it's a dict if all fallbacks result in None
                         cls_criterion_a_params = {}
+                    
                     print(f"   Classifier Criterion A: {cls_criterion_a_name} with params: {cls_criterion_a_params}")
+
                     cls_criterion_b_name = classifier_train_config.get('criterion_b')
-                    if cls_criterion_b_name is None:
-                        cls_criterion_b_name = config.get('criterion_b', '')
+                    if cls_criterion_b_name is None: # Fallback to main config's 'criterion_b'
+                        cls_criterion_b_name = config.get('criterion_b', '') # Default to empty string
                     cls_criterion_b_name = str(cls_criterion_b_name).lower() if cls_criterion_b_name else ''
 
                     cls_criterion_b_params = classifier_train_config.get('criterion_b_params')
-                    if cls_criterion_b_params is None:
+                    if cls_criterion_b_params is None: # Fallback to main config's 'criterion_b_params'
+                        cls_criterion_b_params = config.get('criterion_b_params', {}) # Default to empty dict
+                    if cls_criterion_b_params is None: # Ensure it's a dict
                         cls_criterion_b_params = {}
+                    
                     # first_stage_epochs for classifier-only phase
                     cls_first_stage_epochs = classifier_train_config.get('first_stage_epochs', 0)
                     # --- END: Load classifier-only criterion config properly ---

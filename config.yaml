@@ -154,13 +154,13 @@ classifier_only_training:
     params: # Parameters specific to the optimizer type
       weight_decay: 0.005 # Example for Adam
 
-scheduler:
-  type: ReduceLROnPlateau
-  mode: 'max'         # Use 'max' if monitoring accuracy, 'min' for loss
-  factor: 0.5         # Reduce LR by a factor of 0.5
-  patience: 5         # Number of epochs with no improvement before reducing LR
-  threshold: 0.01     # Minimum change to qualify as improvement
-  min_lr: 0.000001        # Lower bound on the learning rate
+  scheduler:
+    type: ReduceLROnPlateau
+    mode: 'max'         # Use 'max' if monitoring accuracy, 'min' for loss
+    factor: 0.5         # Reduce LR by a factor of 0.5
+    patience: 5         # Number of epochs with no improvement before reducing LR
+    threshold: 0.01     # Minimum change to qualify as improvement
+    min_lr: 0.000001        # Lower bound on the learning rate
 
   # Optional: Define specific criteria for classifier training
   # If not defined, it might reuse criteria from the main training (depending on main.py logic)
