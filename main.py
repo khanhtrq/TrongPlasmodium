@@ -776,7 +776,7 @@ def main():
                         cls_criterion_a_params = config.get('criterion_a_params', config.get('criterion_params', {}))
                     if cls_criterion_a_params is None:
                         cls_criterion_a_params = {}
-
+                    print(f"   Classifier Criterion A: {cls_criterion_a_name} with params: {cls_criterion_a_params}")
                     cls_criterion_b_name = classifier_train_config.get('criterion_b')
                     if cls_criterion_b_name is None:
                         cls_criterion_b_name = config.get('criterion_b', '')
