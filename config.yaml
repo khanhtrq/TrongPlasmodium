@@ -140,7 +140,7 @@ criterion_params:
 
 # --- Classifier-Only Training Configuration (NEW SECTION) ---
 classifier_only_training:
-  enabled: true               # Set to true to run this phase, false to skip
+  enabled: false               # Set to true to run this phase, false to skip
   num_epochs: 100              # Number of epochs for classifier fine-tuning
   patience: 20                # Early stopping patience for classifier fine-tuning
   use_amp: False             # Can be different from main training, if desired
