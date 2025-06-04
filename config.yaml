@@ -74,7 +74,7 @@ model_names:
   # - resnet50 # Example torchvision model
   # - mobilenetv3_large_100.miil_in21k_ft_in1k
   # - mobilenetv4_hybrid_medium.
-  - resnet101.tv_in1k
+  - densenet121
   # - ghostnetv3_100.in1k
 
 # --- Data Augmentation Configuration ---
