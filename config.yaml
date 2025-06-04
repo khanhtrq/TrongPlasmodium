@@ -79,7 +79,7 @@ model_names:
 
 # --- Data Augmentation Configuration ---
 augmentation:
-  enabled: false                      # Enable/disable augmentation
+  enabled: true                      # Enable/disable augmentation
   strategy: 'medium'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
   auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
   randaugment_magnitude: 9          # RandAugment magnitude (0-30)
