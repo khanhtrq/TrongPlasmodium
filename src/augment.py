@@ -313,12 +313,8 @@ class TimmAugmentationStrategy:
                     p=0.2,
                 ),
                 transforms.RandomAdjustSharpness(
-                    sharpness_factor= 5.0,
+                    sharpness_factor=0.5,
                     p=0.2
-                ),
-                transforms.GaussianBlur(
-                    kernel_size=(5, 5),
-                    sigma=(0.1, 2.0),
                 ),    
                 transforms.RandomAffine(
                     degrees=0,
@@ -329,7 +325,7 @@ class TimmAugmentationStrategy:
                 transforms.ToTensor(),
                 transforms.Normalize(mean=self.mean, std=self.std),
                 transforms.RandomErasing(
-                    p=0.2,
+                    p=0.1,
                     scale=(0.02, 0.1),
                     ratio=(0.3, 3.3),
                     value=0
