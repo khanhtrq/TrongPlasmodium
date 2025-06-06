@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
     # --- Test timm model ---
     print(timm.list_models())
-    model_name_timm = "ghostnetv3_100.in1k" # Example timm model
+    model_name_timm = "efficientnet_b0.ra_in1k" # Example timm model
     num_classes_test = 5
     print(f"\n--- Testing timm model: {model_name_timm} ---")
     try:
