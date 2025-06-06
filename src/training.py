@@ -200,10 +200,10 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                     # since labels are mixed and traditional accuracy calculation doesn't apply
                     if phase == 'val' or (phase == 'train' and (mixup_fn is None or not mixup_fn.is_enabled())):
                         preds = outputs.argmax(dim=1).detach().cpu().numpy()
-                        # For mixed labels in training, extract original labels if possible
-                        if hasattr(labels, 'argmax'):  # If labels are one-hot or mixed
+                        # Handle different label formats
+                        if labels.dim() > 1 and labels.size(1) > 1:  # If labels are one-hot or mixed (2D with multiple classes)
                             labels_cpu = labels.argmax(dim=1).detach().cpu().numpy()
-                        else:  # If labels are standard class indices
+                        else:  # If labels are standard class indices (1D)
                             labels_cpu = labels.detach().cpu().numpy()
                         all_preds.extend(preds)
                         all_labels.extend(labels_cpu)
