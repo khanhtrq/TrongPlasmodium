@@ -72,14 +72,14 @@ class_remapping:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  # - mobilenetv3_large_100.miil_in21k_ft_in1k
+  - mobilenetv3_large_100.miil_in21k_ft_in1k
   # - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
   # - densenet121
   # - ghostnetv3_100.in1k
   # -  convnextv2_nano.fcmae_ft_in22k_in1k
   # - efficientnet_b0.ra_in1k
-  - resnet50d.ra4_e3600_r224_in1k
-  - efficientnet_b1.ra4_e3600_r240_in1k
+  # - resnet50d.ra4_e3600_r224_in1k
+  # - efficientnet_b1.ra4_e3600_r240_in1k
 # --- Data Augmentation Configuration ---
 augmentation:
   enabled: false                      # Enable/disable augmentation
