@@ -24,7 +24,8 @@ from src.loss import FocalLoss, F1Loss, get_criterion  # MODIFIED: Removed unuse
 # Advanced augmentation imports
 from src.augment import (
     create_augmentation_strategy,
-    get_timm_transform
+    get_timm_transform,
+    MixupCutmixWrapper
 )
 from src.visualization import (
     plot_sample_images_per_class,
@@ -595,10 +596,38 @@ def main():
                         step_size=7,
                         gamma=0.1
                     )
-                
                 print(f"\n🏋️ Starting training for model: {model_name} (Batch Size: {current_batch_size}, Train Ratio: {train_ratio:.2f})...")
                 model_save_path = os.path.join(model_results_dir, f'{model_name}_best.pth')
                 log_save_path = os.path.join(model_results_dir, f'{model_name}_training_log.csv')
+
+                # --- Setup MixUp/CutMix if enabled ---
+                mixup_fn = None
+                aug_config = config.get('augmentation', {})
+                if aug_config.get('enabled', False):
+                    mixup_alpha = aug_config.get('mixup_alpha', 0)
+                    cutmix_alpha = aug_config.get('cutmix_alpha', 0)
+                    
+                    if mixup_alpha > 0 or cutmix_alpha > 0:
+                        print(f"   🎭 Initializing MixUp/CutMix (mixup_alpha={mixup_alpha}, cutmix_alpha={cutmix_alpha})")
+                        mixup_fn = MixupCutmixWrapper(
+                            mixup_alpha=mixup_alpha,
+                            cutmix_alpha=cutmix_alpha,
+                            cutmix_minmax=None,
+                            prob=aug_config.get('mixup_cutmix_prob', 1.0),
+                            switch_prob=aug_config.get('switch_prob', 0.5),
+                            mode='batch',
+                            label_smoothing=aug_config.get('label_smoothing', 0.1),
+                            num_classes=num_classes
+                        )
+                        if mixup_fn.is_enabled():
+                            print(f"      ✅ MixUp/CutMix enabled successfully")
+                            print(f"      📊 Label smoothing: {aug_config.get('label_smoothing', 0.1)}")
+                            print(f"      🎲 Switch probability: {aug_config.get('switch_prob', 0.5)}")
+                        else:
+                            print(f"      ⚠️ MixUp/CutMix could not be enabled (timm not available)")
+                            mixup_fn = None
+                    else:
+                        print(f"   📋 MixUp/CutMix disabled (both alpha values are 0)")
 
                 model, history = train_model(
                     model=model,
@@ -613,8 +642,10 @@ def main():
                     patience=patience,
                     use_amp=use_amp,
                     save_path=model_save_path,
-                    log_path=log_save_path,                    clip_grad_norm=clip_grad_norm,
-                    train_ratio=train_ratio
+                    log_path=log_save_path,
+                    clip_grad_norm=clip_grad_norm,
+                    train_ratio=train_ratio,
+                    mixup_fn=mixup_fn  # Pass the MixUp/CutMix function
                 )
 
                 model_trained_successfully = True

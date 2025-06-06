@@ -20,13 +20,14 @@ except ImportError:
 def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                 num_epochs=25, patience=5, use_amp=True, save_path='best_model.pth',
                 log_path='training_log.csv', clip_grad_norm=1.0, train_ratio=1.0,
-                criterion_b=None, first_stage_epochs=0):  # Add new parameters
+                criterion_b=None, first_stage_epochs=0, mixup_fn=None):  # Add mixup_fn parameter
     """
     Trains the model, tracks history, handles early stopping, and saves the best weights.
     
     Additional parameters:
         criterion_b: Secondary criterion to use after first_stage_epochs
         first_stage_epochs: Number of epochs to use criterion_a (primary criterion) before switching
+        mixup_fn: MixupCutmixWrapper instance for data augmentation during training
     """
     since = time.time()
 
@@ -167,10 +168,12 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                     continue
 
                 inputs = inputs.to(device, non_blocking=True)  # Use non_blocking for potential speedup
-                labels = labels.to(device, non_blocking=True)
-
-                # Zero the parameter gradients
+                labels = labels.to(device, non_blocking=True)                # Zero the parameter gradients
                 optimizer.zero_grad(set_to_none=True)  # More memory efficient
+
+                # Apply MixUp/CutMix if available and in training phase
+                if phase == 'train' and mixup_fn is not None and mixup_fn.is_enabled():
+                    inputs, labels = mixup_fn(inputs, labels)
 
                 # Forward pass
                 # Track history only in train phase
@@ -192,13 +195,18 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                             warnings.warn(f"   Exceeded NaN/Inf tolerance ({max_nan_inf_tolerance}). Consider checking model stability, learning rate, or data.")
                         del outputs, loss
                         torch.cuda.empty_cache()  # Try to clear cache if OOM might be related
-                        continue  # Skip backprop and metric calculation for this batch
-
-                    # Get predictions for metrics calculation (use cpu for sklearn)
-                    preds = outputs.argmax(dim=1).detach().cpu().numpy()
-                    labels_cpu = labels.detach().cpu().numpy()
-                    all_preds.extend(preds)
-                    all_labels.extend(labels_cpu)
+                        continue  # Skip backprop and metric calculation for this batch                    # Get predictions for metrics calculation (use cpu for sklearn)
+                    # Note: Skip prediction metrics during training if MixUp/CutMix is applied
+                    # since labels are mixed and traditional accuracy calculation doesn't apply
+                    if phase == 'val' or (phase == 'train' and (mixup_fn is None or not mixup_fn.is_enabled())):
+                        preds = outputs.argmax(dim=1).detach().cpu().numpy()
+                        # For mixed labels in training, extract original labels if possible
+                        if hasattr(labels, 'argmax'):  # If labels are one-hot or mixed
+                            labels_cpu = labels.argmax(dim=1).detach().cpu().numpy()
+                        else:  # If labels are standard class indices
+                            labels_cpu = labels.detach().cpu().numpy()
+                        all_preds.extend(preds)
+                        all_labels.extend(labels_cpu)
 
                     # Backward pass + optimize only if in training phase
                     if phase == 'train':
@@ -218,13 +226,18 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                             loss.backward()
                             if clip_grad_norm is not None:
                                 torch_utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
-                            optimizer.step()
-
-                # Statistics
+                            optimizer.step()                # Statistics
                 running_loss += loss.item() * inputs.size(0)
                 batch_count += 1
                 pbar.set_postfix({'loss': f'{loss.item():.4f}'})
-                del inputs, labels, outputs, loss, preds, labels_cpu
+                
+                # Clean up variables
+                del outputs, loss
+                if 'preds' in locals():
+                    del preds
+                if 'labels_cpu' in locals():
+                    del labels_cpu
+                del inputs, labels
                 if is_cuda:
                     torch.cuda.empty_cache()
 
