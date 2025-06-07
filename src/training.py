@@ -344,8 +344,8 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                     epochs_no_improve += 1
                     print(f'📉 {primary_metric} did not improve for {epochs_no_improve} epoch(s). Best: {best_val_metric:.4f}')
                     if epochs_no_improve == patience - 5:
-                        print(f'📊 {epochs_no_improve} epochs without improvement. Disabling MixUp/CutMix to stabilize training.')
                         if mixup_fn is not None:
+                            print(f'📊 {epochs_no_improve} epochs without improvement. Disabling MixUp/CutMix to stabilize training.')
                             mixup_fn.enabled = False  # Disable MixUp/CutMix if no improvement for 5 epochs
 
         epoch_duration = time.time() - epoch_start_time
