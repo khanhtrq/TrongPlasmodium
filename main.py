@@ -14,7 +14,7 @@ import gc  # Import garbage collector
 import math  # For ceiling function
 import random  # For setting Python random seed
 
-from src.data_loader import AnnotationDataset, ImageFolderWrapper, CombinedDataset, collate_fn_skip_error  # Adjusted import
+from src.data_loader import AnnotationDataset, ImageFolderWrapper, CombinedDataset, collate_fn_skip_error, create_weighted_random_sampler, get_effective_sampler_config  # Adjusted import
 from src.device_handler import get_device, setup_model_for_training  # MODIFIED: Import setup_model_for_training
 from src.model_initializer import initialize_model
 from src.training import train_model, train_classifier_only  # MODIFIED: Import train_classifier_only
@@ -441,12 +441,39 @@ def main():
                         else:
                             warnings.warn("⚠️ Cannot plot sample images: First training dataset object missing required attributes ('classes', 'imgs', 'loader', 'transform').")
                     else:
-                         warnings.warn("⚠️ Cannot plot sample images: No training datasets loaded.")
+                         warnings.warn("⚠️ Cannot plot sample images: No training datasets loaded.")                # --- Create WeightedRandomSampler if enabled ---
+                sampler_config = config.get('weighted_random_sampler', {})
+                train_sampler = None
+                if sampler_config.get('enabled', False):
+                    try:
+                        train_sampler = create_weighted_random_sampler(
+                            final_train_dataset, 
+                            num_classes, 
+                            sampler_config
+                        )
+                        print(f"   ✅ WeightedRandomSampler created for training data")
+                    except Exception as e:
+                        print(f"   ⚠️ Failed to create WeightedRandomSampler: {e}")
+                        print(f"   📝 Falling back to standard random sampling")
+                        train_sampler = None
 
-                train_loader = DataLoader(final_train_dataset, batch_size=current_batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0, drop_last=True)
+                # --- Create DataLoaders ---
+                train_loader = DataLoader(
+                    final_train_dataset, 
+                    batch_size=current_batch_size, 
+                    sampler=train_sampler,  # Use WeightedRandomSampler if available
+                    shuffle=(train_sampler is None),  # Only shuffle if no sampler is used
+                    num_workers=num_workers, 
+                    pin_memory=True, 
+                    collate_fn=collate_fn_skip_error, 
+                    persistent_workers=num_workers > 0, 
+                    drop_last=True
+                )
                 val_loader = DataLoader(final_val_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0, drop_last=True) if final_val_dataset else None
                 test_loader = DataLoader(final_test_dataset, batch_size=current_batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, collate_fn=collate_fn_skip_error, persistent_workers=num_workers > 0, drop_last=True) if final_test_dataset else None                
-                print(f"\n📦 DataLoaders created (Batch size: {current_batch_size}, Workers: {num_workers})")
+                
+                sampler_info = "WeightedRandomSampler" if train_sampler else "Random Shuffle"
+                print(f"\n📦 DataLoaders created (Batch size: {current_batch_size}, Workers: {num_workers}, Sampling: {sampler_info})")
                 dataloaders = {'train': train_loader}
                 if val_loader: dataloaders['val'] = val_loader
 
@@ -876,9 +903,7 @@ def main():
                             num_classes=num_classes,
                             device=device,
                             criterion_params=cls_criterion_b_params
-                        )
-
-                    # Add noise_sigma parameters to optimizer if needed
+                        )                    # Add noise_sigma parameters to optimizer if needed
                     if cls_criterion_a_name in ['bmcloss', 'gailoss']:
                         optimizer_cls.add_param_group({'params': criterion_cls_a.noise_sigma, 'lr': 1e-2, 'name': 'noise_sigma_a'})
                     if criterion_cls_b and cls_criterion_b_name in ['bmcloss', 'gailoss']:
@@ -887,10 +912,56 @@ def main():
                     cls_model_save_path = os.path.join(model_results_dir, f'{model_name}_classifier_best.pth')
                     cls_log_save_path = os.path.join(model_results_dir, f'{model_name}_classifier_training_log.csv')
 
+                    # --- Create WeightedRandomSampler for classifier training if enabled ---
+                    main_sampler_config = config.get('weighted_random_sampler', {})
+                    cls_sampler_config_specific = classifier_train_config.get('weighted_random_sampler', {})
+                    
+                    # Get effective sampler config (classifier-specific overrides main config)
+                    cls_effective_sampler_config = get_effective_sampler_config(main_sampler_config, cls_sampler_config_specific)
+                    
+                    cls_train_sampler = None
+                    cls_dataloaders = dataloaders.copy()  # Start with existing dataloaders
+                    
+                    if cls_effective_sampler_config.get('enabled', False):
+                        try:
+                            cls_train_sampler = create_weighted_random_sampler(
+                                final_train_dataset, 
+                                num_classes, 
+                                cls_effective_sampler_config
+                            )
+                            print(f"   ✅ WeightedRandomSampler created for classifier training")
+                            
+                            # Create new training DataLoader with classifier-specific sampler
+                            cls_train_loader = DataLoader(
+                                final_train_dataset, 
+                                batch_size=current_batch_size, 
+                                sampler=cls_train_sampler,
+                                shuffle=False,  # Cannot use shuffle with sampler
+                                num_workers=num_workers, 
+                                pin_memory=True, 
+                                collate_fn=collate_fn_skip_error, 
+                                persistent_workers=num_workers > 0, 
+                                drop_last=True
+                            )
+                            cls_dataloaders['train'] = cls_train_loader
+                            print(f"   📦 Created new training DataLoader for classifier training with WeightedRandomSampler")
+                            
+                        except Exception as e:
+                            print(f"   ⚠️ Failed to create WeightedRandomSampler for classifier training: {e}")
+                            print(f"   📝 Using existing training DataLoader")
+                    else:
+                        if cls_sampler_config_specific.get('enabled') is not None:
+                            # Explicitly disabled for classifier training
+                            print(f"   📝 WeightedRandomSampler explicitly disabled for classifier training")
+                        else:
+                            # Using main config (which might be enabled or disabled)
+                            sampler_status = "enabled" if main_sampler_config.get('enabled', False) else "disabled"
+                            print(f"   📝 Using main WeightedRandomSampler config for classifier training ({sampler_status})")
+
                     try:
                         model, history_cls = train_classifier_only(
                             model=model,
-                            dataloaders=dataloaders,
+                            dataloaders=cls_dataloaders,  # Use potentially modified dataloaders
                             criterion=criterion_cls_a,
                             criterion_b=criterion_cls_b,
                             first_stage_epochs=cls_first_stage_epochs,

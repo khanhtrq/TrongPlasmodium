@@ -73,7 +73,7 @@ model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
   - mobilenetv3_large_100.miil_in21k_ft_in1k
-  - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
+  # - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
   # - densenet121
   # - ghostnetv3_100.in1k
   # -  convnextv2_nano.fcmae_ft_in22k_in1k
@@ -82,7 +82,7 @@ model_names:
   # - efficientnet_b1.ra4_e3600_r240_in1k
 # --- Data Augmentation Configuration ---
 augmentation:
-  enabled: false                      # Enable/disable augmentation
+  enabled: true                      # Enable/disable augmentation
   strategy: 'medium'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
   auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
   randaugment_magnitude: 9          # RandAugment magnitude (0-30)
@@ -102,7 +102,7 @@ augmentation:
 # --- Training Configuration ---
 training:
   dropout_rate: 0.2 # Dropout rate for the model
-  num_epochs: 100 # Reduced for example
+  num_epochs: 1 # Reduced for example
   patience: 20   # Early stopping patience
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
   clip_grad_norm: 0 # Max norm for gradient clipping (set to 0 or null to disable)
@@ -142,15 +142,34 @@ criterion: crossentropyloss
 criterion_params: 
   use_class_weights: False
 
+# --- WeightedRandomSampler Configuration ---
+weighted_random_sampler:
+  enabled: false                    # Enable/disable WeightedRandomSampler for handling class imbalance
+  replacement: true                 # Whether to sample with replacement (usually true for imbalanced datasets)
+  weight_calculation: 'inverse'     # Options: 'inverse', 'balanced', 'custom'
+  # custom_weights: [1.0, 2.0, 1.5, 3.0, 1.0, 2.5]  # Only used if weight_calculation is 'custom'
+  apply_sqrt: false                 # Apply square root to computed weights (softer balancing)
+  min_weight: 0.1                   # Minimum weight value (prevents extreme weights)
+  max_weight: 10.0                  # Maximum weight value (prevents extreme weights)
+
 # --- Classifier-Only Training Configuration (NEW SECTION) ---
 classifier_only_training:
-  enabled: false               # Set to true to run this phase, false to skip
-  num_epochs: 100              # Number of epochs for classifier fine-tuning
+  enabled: true               # Set to true to run this phase, false to skip
+  num_epochs: 1              # Number of epochs for classifier fine-tuning
   patience: 20                # Early stopping patience for classifier fine-tuning
   use_amp: False             # Can be different from main training, if desired
   clip_grad_norm: 0       # Max norm for gradient clipping for this phase
   train_ratio: 1.0          # Ratio of training set for this phase (usually 1.0)
   first_stage_epochs: 0     # If using a two-stage criterion for classifier training
+  
+  # WeightedRandomSampler for classifier training (inherits from main config if not specified)
+  weighted_random_sampler:
+    enabled: true                    # Enable/disable for classifier training specifically
+    replacement: true                 # Whether to sample with replacement
+    weight_calculation: 'inverse'     # Options: 'inverse', 'balanced', 'custom'
+    apply_sqrt: false                 # Apply square root to computed weights
+    min_weight: 0.1                   # Minimum weight value
+    max_weight: 10.0                  # Maximum weight value
 
   optimizer:
     type: Adam # Options: Adam, AdamW, SGD, etc.

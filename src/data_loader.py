@@ -329,3 +329,161 @@ def collate_fn_skip_error(batch):
 # train_loader = DataLoader(..., collate_fn=collate_fn_skip_error)
 # val_loader = DataLoader(..., collate_fn=collate_fn_skip_error)
 # test_loader = DataLoader(..., collate_fn=collate_fn_skip_error)
+
+# === WeightedRandomSampler Utilities ===
+
+def compute_class_weights_from_dataset(dataset, num_classes, weight_calculation='inverse', apply_sqrt=False, min_weight=0.1, max_weight=10.0):
+    """
+    Compute class weights from a dataset for WeightedRandomSampler.
+    
+    Args:
+        dataset: Dataset with 'targets' attribute containing class indices
+        num_classes (int): Number of classes
+        weight_calculation (str): Method to calculate weights
+            - 'inverse': 1.0 / class_count
+            - 'balanced': sklearn-style balanced weights
+            - 'custom': Use predefined custom weights (not implemented here)
+        apply_sqrt (bool): Apply square root to weights for softer balancing
+        min_weight (float): Minimum weight value to prevent extreme weights
+        max_weight (float): Maximum weight value to prevent extreme weights
+    
+    Returns:
+        torch.Tensor: Weights for each class
+    """
+    import torch
+    import numpy as np
+    from collections import Counter
+    
+    print(f"📊 Computing class weights for WeightedRandomSampler...")
+    
+    # Get targets from dataset
+    if hasattr(dataset, 'targets'):
+        targets = dataset.targets
+        if isinstance(targets, torch.Tensor):
+            targets = targets.numpy()
+        elif isinstance(targets, list):
+            targets = np.array(targets)
+    else:
+        raise AttributeError("Dataset must have 'targets' attribute for WeightedRandomSampler")
+    
+    # Count class frequencies
+    class_counts = Counter(targets)
+    print(f"   Class distribution: {dict(class_counts)}")
+    
+    # Ensure all classes are represented (fill missing classes with 1)
+    for class_idx in range(num_classes):
+        if class_idx not in class_counts:
+            class_counts[class_idx] = 1
+            print(f"   ⚠️ Class {class_idx} not found in dataset, setting count to 1")
+    
+    # Calculate weights based on method
+    if weight_calculation == 'inverse':
+        # Simple inverse frequency
+        class_weights = torch.zeros(num_classes)
+        for class_idx in range(num_classes):
+            class_weights[class_idx] = 1.0 / class_counts[class_idx]
+    
+    elif weight_calculation == 'balanced':
+        # Sklearn-style balanced weights: n_samples / (n_classes * count_for_class)
+        n_samples = len(targets)
+        class_weights = torch.zeros(num_classes)
+        for class_idx in range(num_classes):
+            class_weights[class_idx] = n_samples / (num_classes * class_counts[class_idx])
+    
+    else:
+        raise ValueError(f"Unsupported weight_calculation method: {weight_calculation}")
+    
+    # Apply square root for softer balancing if requested
+    if apply_sqrt:
+        class_weights = torch.sqrt(class_weights)
+        print(f"   ✅ Applied square root to weights for softer balancing")
+    
+    # Clamp weights to prevent extreme values
+    class_weights = torch.clamp(class_weights, min=min_weight, max=max_weight)
+    
+    print(f"   📊 Computed class weights: {class_weights.tolist()}")
+    print(f"   📈 Weight ratio (max/min): {class_weights.max().item()/class_weights.min().item():.2f}")
+    
+    return class_weights
+
+
+def create_weighted_random_sampler(dataset, num_classes, sampler_config):
+    """
+    Create a WeightedRandomSampler based on dataset and configuration.
+    
+    Args:
+        dataset: Dataset with 'targets' attribute
+        num_classes (int): Number of classes
+        sampler_config (dict): Configuration for the sampler
+    
+    Returns:
+        torch.utils.data.WeightedRandomSampler or None if disabled
+    """
+    from torch.utils.data import WeightedRandomSampler
+    
+    if not sampler_config.get('enabled', False):
+        return None
+    
+    print(f"🎲 Creating WeightedRandomSampler...")
+    print(f"   Configuration: {sampler_config}")
+    
+    # Compute class weights
+    class_weights = compute_class_weights_from_dataset(
+        dataset, 
+        num_classes,
+        weight_calculation=sampler_config.get('weight_calculation', 'inverse'),
+        apply_sqrt=sampler_config.get('apply_sqrt', False),
+        min_weight=sampler_config.get('min_weight', 0.1),
+        max_weight=sampler_config.get('max_weight', 10.0)
+    )
+    
+    # Get targets from dataset
+    if hasattr(dataset, 'targets'):
+        targets = dataset.targets
+        if isinstance(targets, torch.Tensor):
+            targets = targets.numpy()
+        elif isinstance(targets, list):
+            targets = np.array(targets)
+    else:
+        raise AttributeError("Dataset must have 'targets' attribute for WeightedRandomSampler")
+    
+    # Create sample weights (weight for each sample based on its class)
+    sample_weights = torch.zeros(len(targets))
+    for idx, target in enumerate(targets):
+        sample_weights[idx] = class_weights[target]
+    
+    # Create the sampler
+    sampler = WeightedRandomSampler(
+        weights=sample_weights,
+        num_samples=len(dataset),
+        replacement=sampler_config.get('replacement', True)
+    )
+    
+    print(f"   ✅ WeightedRandomSampler created with {len(sample_weights)} samples")
+    print(f"   📊 Sample weights range: [{sample_weights.min().item():.4f}, {sample_weights.max().item():.4f}]")
+    
+    return sampler
+
+
+def get_effective_sampler_config(main_config, phase_config=None):
+    """
+    Get the effective sampler configuration, with phase-specific config overriding main config.
+    
+    Args:
+        main_config (dict): Main WeightedRandomSampler configuration
+        phase_config (dict, optional): Phase-specific configuration (e.g., for classifier training)
+    
+    Returns:
+        dict: Effective configuration to use
+    """
+    if phase_config is None:
+        return main_config.copy()
+    
+    # Start with main config
+    effective_config = main_config.copy()
+    
+    # Override with phase-specific settings
+    for key, value in phase_config.items():
+        effective_config[key] = value
+    
+    return effective_config

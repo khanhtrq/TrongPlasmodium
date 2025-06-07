@@ -76,6 +76,7 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
             'std': data_config.get('std', (0.229, 0.224, 0.225)),
             'crop_pct': data_config.get('crop_pct', 0.875) # Important for validation resizing
         }
+        print(f"🔍 Model transfrom: {transform}")
         print(f"⚙️ timm model config: {model_config}")
         print(f"🖼️ Recommended input size: {input_size}x{input_size}")
         print(f"🔄 Using timm's recommended transform pipeline.")
