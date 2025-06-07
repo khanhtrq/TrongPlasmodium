@@ -387,12 +387,12 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
     except Exception as e:
         print(f"❌ Error loading best model weights: {e}. Returning model with last epoch weights.")
 
-    return model, history
+    return model, history, best_val_metric
 
 def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, device,
                           num_epochs=25, patience=5, use_amp=True, save_path='best_classifier_model.pth',
                           log_path='classifier_training_log.csv', clip_grad_norm=1.0, train_ratio=1.0,
-                          criterion_b=None, first_stage_epochs=0):
+                          criterion_b=None, first_stage_epochs=0, init_best_val_metric=0.0):
     """
     Trains ONLY THE CLASSIFIER part of the model, assuming feature extractor layers are frozen.
     Tracks history, handles early stopping, and saves the best weights for the classifier.
@@ -438,7 +438,7 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
         train_ratio = 1.0
 
     best_model_wts = copy.deepcopy(model.state_dict())
-    best_val_metric = 0.0  # Use a generic name, decided by primary metric below
+    best_val_metric = init_best_val_metric  # Use a generic name, decided by primary metric below
     primary_metric = 'val_acc_macro'  # Metric to monitor for improvement and early stopping
     epochs_no_improve = 0
     nan_inf_counter = 0

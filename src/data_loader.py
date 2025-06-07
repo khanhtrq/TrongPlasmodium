@@ -380,8 +380,9 @@ def compute_class_weights_from_dataset(dataset, num_classes, weight_calculation=
     if weight_calculation == 'inverse':
         # Simple inverse frequency
         class_weights = torch.zeros(num_classes)
+        total_samples = sum(class_counts.values())
         for class_idx in range(num_classes):
-            class_weights[class_idx] = 1.0 / class_counts[class_idx]
+            class_weights[class_idx] = total_samples / class_counts[class_idx]
     
     elif weight_calculation == 'balanced':
         # Sklearn-style balanced weights: n_samples / (n_classes * count_for_class)

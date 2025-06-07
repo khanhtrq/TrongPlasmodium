@@ -656,7 +656,7 @@ def main():
                     else:
                         print(f"   📋 MixUp/CutMix disabled (both alpha values are 0)")
 
-                model, history = train_model(
+                model, history, train_best_val_metric = train_model(
                     model=model,
                     dataloaders=dataloaders,
                     criterion=criterion_a,  # Pass criterion_a as primary criterion
@@ -974,7 +974,8 @@ def main():
                             save_path=cls_model_save_path,
                             log_path=cls_log_save_path,
                             clip_grad_norm=classifier_train_config.get('clip_grad_norm', clip_grad_norm),
-                            train_ratio=classifier_train_config.get('train_ratio', train_ratio)
+                            train_ratio=classifier_train_config.get('train_ratio', train_ratio),
+                            init_best_val_metric=train_best_val_metric,  # Pass initial best metric from main training
                         )
                         print(f"✅ Classifier-Only Fine-tuning completed for '{model_name}'.")
 
