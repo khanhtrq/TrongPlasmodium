@@ -109,7 +109,7 @@ def init_regularizers(regularizer_config):
         
         max_norm_regularizer = MaxNorm_via_PGD(
             thresh=thresh,
-            lp_norm=lp_norm,
+            LpNorm=lp_norm,
             tau=tau
         )
         print(f"      ✅ Max-Norm regularizer created (thresh={thresh}, lp_norm={lp_norm}, tau={tau})")
@@ -125,7 +125,7 @@ def init_regularizers(regularizer_config):
         tau_norm_frequency = tau_norm_config.get('apply_frequency', 1)
         
         tau_normalizer = Normalizer(
-            lp_norm=lp_norm,
+            LpNorm=lp_norm,
             tau=tau
         )
         print(f"      ✅ Tau-Normalization regularizer created (lp_norm={lp_norm}, tau={tau}, frequency={tau_norm_frequency})")
