@@ -72,7 +72,7 @@ class_remapping:
 model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
-  - mobilenetv3_large_100.miil_in21k_ft_in1k
+  # - mobilenetv3_large_100.miil_in21k_ft_in1k
   # - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
   # - densenet121
   # - ghostnetv3_100.in1k
@@ -80,9 +80,10 @@ model_names:
   # - efficientnet_b0.ra_in1k
   # - resnet50d.ra4_e3600_r224_in1k
   # - efficientnet_b1.ra4_e3600_r240_in1k
+  - mobilenetv3_large_150d.ra4_e3600_r256_in1k
 # --- Data Augmentation Configuration ---
 augmentation:
-  enabled: true                      # Enable/disable augmentation
+  enabled: false                      # Enable/disable augmentation
   strategy: 'medium'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
   auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
   randaugment_magnitude: 9          # RandAugment magnitude (0-30)
@@ -102,7 +103,7 @@ augmentation:
 # --- Training Configuration ---
 training:
   dropout_rate: 0.2 # Dropout rate for the model
-  num_epochs: 1 # Reduced for example
+  num_epochs: 100 # Reduced for example
   patience: 20   # Early stopping patience
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
   clip_grad_norm: 0 # Max norm for gradient clipping (set to 0 or null to disable)
@@ -154,7 +155,7 @@ weighted_random_sampler:
 
 # --- Classifier-Only Training Configuration (NEW SECTION) ---
 classifier_only_training:
-  enabled: true               # Set to true to run this phase, false to skip
+  enabled: false               # Set to true to run this phase, false to skip
   num_epochs: 1              # Number of epochs for classifier fine-tuning
   patience: 20                # Early stopping patience for classifier fine-tuning
   use_amp: False             # Can be different from main training, if desired
@@ -164,7 +165,7 @@ classifier_only_training:
   
   # WeightedRandomSampler for classifier training (inherits from main config if not specified)
   weighted_random_sampler:
-    enabled: true                    # Enable/disable for classifier training specifically
+    enabled: false                    # Enable/disable for classifier training specifically
     replacement: true                 # Whether to sample with replacement
     weight_calculation: 'inverse'     # Options: 'inverse', 'balanced', 'custom'
     apply_sqrt: false                 # Apply square root to computed weights
@@ -187,7 +188,7 @@ classifier_only_training:
 
   # Optional: Define specific criteria for classifier training
   # If not defined, it might reuse criteria from the main training (depending on main.py logic)
-  criterion_a: focalloss
+  criterion_a: crossentropyloss
   criterion_a_params:
     # use_class_weights: false # Or true, with weights calculated for this phase if needed
     gamma: 5.0
