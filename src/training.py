@@ -10,6 +10,7 @@ import torch.nn.utils as torch_utils  # For gradient clipping
 import math  # For ceiling function
 from torch.utils.data import DataLoader, SubsetRandomSampler  # Import sampler
 from src.loss import get_active_criterion  # Import the helper function
+from src.regularizers import MaxNorm_via_PGD, Normalizer  # Import regularizers
 
 try:
     import torch_xla.core.xla_model as xm
@@ -20,7 +21,8 @@ except ImportError:
 def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                 num_epochs=25, patience=5, use_amp=True, save_path='best_model.pth',
                 log_path='training_log.csv', clip_grad_norm=1.0, train_ratio=1.0,
-                criterion_b=None, first_stage_epochs=0, mixup_fn=None):  # Add mixup_fn parameter
+                criterion_b=None, first_stage_epochs=0, mixup_fn=None,
+                max_norm_regularizer=None, tau_normalizer=None, tau_norm_frequency=1):  # Add regularizer parameters
     """
     Trains the model, tracks history, handles early stopping, and saves the best weights.
     
@@ -206,9 +208,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                         else:  # If labels are standard class indices (1D)
                             labels_cpu = labels.detach().cpu().numpy()
                         all_preds.extend(preds)
-                        all_labels.extend(labels_cpu)
-
-                    # Backward pass + optimize only if in training phase
+                        all_labels.extend(labels_cpu)                    # Backward pass + optimize only if in training phase
                     if phase == 'train':
                         if is_cuda and use_amp:
                             scaler.scale(loss).backward()
@@ -226,7 +226,14 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                             loss.backward()
                             if clip_grad_norm is not None:
                                 torch_utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
-                            optimizer.step()                # Statistics
+                            optimizer.step()
+                        
+                        # Apply regularizers after optimizer step
+                        if max_norm_regularizer is not None:
+                            max_norm_regularizer.PGD(model)
+                        
+                        if tau_normalizer is not None and (epoch + 1) % tau_norm_frequency == 0:
+                            tau_normalizer.apply_on(model)# Statistics
                 running_loss += loss.item() * inputs.size(0)
                 batch_count += 1
                 pbar.set_postfix({'loss': f'{loss.item():.4f}'})
@@ -392,7 +399,8 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
 def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, device,
                           num_epochs=25, patience=5, use_amp=True, save_path='best_classifier_model.pth',
                           log_path='classifier_training_log.csv', clip_grad_norm=1.0, train_ratio=1.0,
-                          criterion_b=None, first_stage_epochs=0, init_best_val_metric=0.0):
+                          criterion_b=None, first_stage_epochs=0, init_best_val_metric=0.0,
+                          max_norm_regularizer=None, tau_normalizer=None, tau_norm_frequency=1):  # Add regularizer parameters
     """
     Trains ONLY THE CLASSIFIER part of the model, assuming feature extractor layers are frozen.
     Tracks history, handles early stopping, and saves the best weights for the classifier.
@@ -582,7 +590,7 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
                     if not torch.isfinite(loss).item():
                         nan_inf_counter += 1
                         warnings.warn(f"⚠️ NaN/Inf loss detected in {phase} phase (epoch {epoch+1}, batch {batch_count+1}). Loss: {loss.item()}. Skipping update for this batch.")
-                        if nan_inf_counter > max_nan_inf_tolerance:
+                        if nan_inf_counter > max_nan_inf_tolerance:                        
                             warnings.warn(f"   Exceeded NaN/Inf tolerance ({max_nan_inf_tolerance}). Consider checking model stability, learning rate, or data.")
                         del outputs, loss
                         if is_cuda: torch.cuda.empty_cache()
@@ -611,6 +619,13 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
                             if clip_grad_norm is not None:
                                 torch_utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
                             optimizer.step()
+                        
+                        # Apply regularizers after optimizer step
+                        if max_norm_regularizer is not None:
+                            max_norm_regularizer.PGD(model)
+                        
+                        if tau_normalizer is not None and (epoch + 1) % tau_norm_frequency == 0:
+                            tau_normalizer.apply_on(model)
 
                 running_loss += loss.item() * inputs.size(0)
                 batch_count += 1

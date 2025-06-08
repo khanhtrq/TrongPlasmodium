@@ -19,6 +19,7 @@ from src.device_handler import get_device, setup_model_for_training  # MODIFIED:
 from src.model_initializer import initialize_model
 from src.training import train_model, train_classifier_only  # MODIFIED: Import train_classifier_only
 from src.evaluation import infer_from_annotation, report_classification
+from src.regularizers import MaxNorm_via_PGD, Normalizer  # Import regularizers
 from src.gradcam import generate_and_save_gradcam_per_class
 from src.loss import FocalLoss, F1Loss, get_criterion  # MODIFIED: Removed unused compute_class_weights
 # Advanced augmentation imports
@@ -83,6 +84,55 @@ def load_config(config_path='config.yaml'):
     except Exception as e:
         print(f"❌ An unexpected error occurred while loading config: {e}")
         exit()
+
+def init_regularizers(regularizer_config):
+    """
+    Initialize regularizers based on configuration.
+    
+    Args:
+        regularizer_config (dict): Configuration dictionary for regularizers
+        
+    Returns:
+        tuple: (max_norm_regularizer, tau_normalizer, tau_norm_frequency)
+    """
+    max_norm_regularizer = None
+    tau_normalizer = None
+    tau_norm_frequency = 1
+    
+    # Initialize Max-Norm regularizer
+    max_norm_config = regularizer_config.get('max_norm', {})
+    if max_norm_config.get('enabled', False):
+        print(f"   🔧 Initializing Max-Norm regularizer...")
+        thresh = max_norm_config.get('thresh', 1.0)
+        lp_norm = max_norm_config.get('lp_norm', 2)
+        tau = max_norm_config.get('tau', 1.0)
+        
+        max_norm_regularizer = MaxNorm_via_PGD(
+            thresh=thresh,
+            lp_norm=lp_norm,
+            tau=tau
+        )
+        print(f"      ✅ Max-Norm regularizer created (thresh={thresh}, lp_norm={lp_norm}, tau={tau})")
+    else:
+        print(f"   📝 Max-Norm regularizer disabled")
+    
+    # Initialize Tau-Normalization regularizer
+    tau_norm_config = regularizer_config.get('tau_normalization', {})
+    if tau_norm_config.get('enabled', False):
+        print(f"   🔧 Initializing Tau-Normalization regularizer...")
+        lp_norm = tau_norm_config.get('lp_norm', 2)
+        tau = tau_norm_config.get('tau', 1.0)
+        tau_norm_frequency = tau_norm_config.get('apply_frequency', 1)
+        
+        tau_normalizer = Normalizer(
+            lp_norm=lp_norm,
+            tau=tau
+        )
+        print(f"      ✅ Tau-Normalization regularizer created (lp_norm={lp_norm}, tau={tau}, frequency={tau_norm_frequency})")
+    else:
+        print(f"   📝 Tau-Normalization regularizer disabled")
+    
+    return max_norm_regularizer, tau_normalizer, tau_norm_frequency
 
 def main():
     # --- Configuration Loading ---
@@ -654,7 +704,10 @@ def main():
                             print(f"      ⚠️ MixUp/CutMix could not be enabled (timm not available)")
                             mixup_fn = None
                     else:
-                        print(f"   📋 MixUp/CutMix disabled (both alpha values are 0)")
+                        print(f"   📋 MixUp/CutMix disabled (both alpha values are 0)")                # --- Initialize Regularizers for Main Training ---
+                print(f"\n🔧 Initializing regularizers for main training...")
+                main_regularizer_config = config.get('regularization', {})
+                max_norm_reg, tau_norm_reg, tau_freq = init_regularizers(main_regularizer_config)
 
                 model, history, train_best_val_metric = train_model(
                     model=model,
@@ -672,7 +725,10 @@ def main():
                     log_path=log_save_path,
                     clip_grad_norm=clip_grad_norm,
                     train_ratio=train_ratio,
-                    mixup_fn=mixup_fn  # Pass the MixUp/CutMix function
+                    mixup_fn=mixup_fn,  # Pass the MixUp/CutMix function
+                    max_norm_regularizer=max_norm_reg,  # Pass max-norm regularizer
+                    tau_normalizer=tau_norm_reg,  # Pass tau-normalization regularizer
+                    tau_norm_frequency=tau_freq  # Pass tau-normalization frequency
                 )
 
                 model_trained_successfully = True
@@ -958,6 +1014,11 @@ def main():
                             sampler_status = "enabled" if main_sampler_config.get('enabled', False) else "disabled"
                             print(f"   📝 Using main WeightedRandomSampler config for classifier training ({sampler_status})")
 
+                    # --- Initialize Regularizers for Classifier Training ---
+                    print(f"\n🔧 Initializing regularizers for classifier training...")
+                    cls_regularizer_config = classifier_train_config.get('regularization', main_regularizer_config)
+                    cls_max_norm_reg, cls_tau_norm_reg, cls_tau_freq = init_regularizers(cls_regularizer_config)
+
                     try:
                         model, history_cls = train_classifier_only(
                             model=model,
@@ -976,6 +1037,9 @@ def main():
                             clip_grad_norm=classifier_train_config.get('clip_grad_norm', clip_grad_norm),
                             train_ratio=classifier_train_config.get('train_ratio', train_ratio),
                             init_best_val_metric=train_best_val_metric,  # Pass initial best metric from main training
+                            max_norm_regularizer=cls_max_norm_reg,  # Pass max-norm regularizer
+                            tau_normalizer=cls_tau_norm_reg,  # Pass tau-normalization regularizer
+                            tau_norm_frequency=cls_tau_freq  # Pass tau-normalization frequency
                         )
                         print(f"✅ Classifier-Only Fine-tuning completed for '{model_name}'.")
 

@@ -103,12 +103,26 @@ augmentation:
 # --- Training Configuration ---
 training:
   dropout_rate: 0.2 # Dropout rate for the model
-  num_epochs: 100 # Reduced for example
+  num_epochs: 1 # Reduced for example
   patience: 20   # Early stopping patience
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
   clip_grad_norm: 0 # Max norm for gradient clipping (set to 0 or null to disable)
   train_ratio: 1 # Ratio of the (combined) training set to use (1.0 = 100%, 0.1 = 10%)
   first_stage_epochs: 0 # Number of epochs to use criterion_a before switching to criterion_b
+
+# --- Regularization Configuration ---
+regularization:
+  max_norm:
+    enabled: true              # Enable/disable max-norm regularization via PGD
+    thresh: 0.1                 # Threshold parameter for max-norm constraint
+    lp_norm: 2                  # Lp norm to use (typically 2)
+    tau: 1                      # Tau parameter for norm calculation
+  
+  tau_normalization:
+    enabled: false              # Enable/disable tau-normalization
+    lp_norm: 2                  # Lp norm to use (typically 2)
+    tau: 1                      # Tau parameter for normalization
+    apply_frequency: 1          # Apply every N epochs (1 = every epoch)
 
 # --- Optimizer Configuration ---
 optimizer:
@@ -145,7 +159,7 @@ criterion_params:
 
 # --- WeightedRandomSampler Configuration ---
 weighted_random_sampler:
-  enabled: false                    # Enable/disable WeightedRandomSampler for handling class imbalance
+  enabled: true                    # Enable/disable WeightedRandomSampler for handling class imbalance
   replacement: true                 # Whether to sample with replacement (usually true for imbalanced datasets)
   weight_calculation: 'inverse'     # Options: 'inverse', 'balanced', 'custom'
   # custom_weights: [1.0, 2.0, 1.5, 3.0, 1.0, 2.5]  # Only used if weight_calculation is 'custom'
@@ -155,7 +169,7 @@ weighted_random_sampler:
 
 # --- Classifier-Only Training Configuration (NEW SECTION) ---
 classifier_only_training:
-  enabled: false               # Set to true to run this phase, false to skip
+  enabled: true               # Set to true to run this phase, false to skip
   num_epochs: 1              # Number of epochs for classifier fine-tuning
   patience: 20                # Early stopping patience for classifier fine-tuning
   use_amp: False             # Can be different from main training, if desired
@@ -198,6 +212,19 @@ classifier_only_training:
   # criterion_b_params:
   #   use_class_weights: false
 
+  # Regularization for classifier training (inherits from main config if not specified)
+  regularization:
+    max_norm:
+      enabled: false              # Enable/disable max-norm regularization for classifier training
+      thresh: 0.1                 # Threshold parameter for max-norm constraint
+      lp_norm: 2                  # Lp norm to use (typically 2)
+      tau: 1                      # Tau parameter for norm calculation
+    
+    tau_normalization:
+      enabled: true              # Enable/disable tau-normalization for classifier training
+      lp_norm: 2                  # Lp norm to use (typically 2)
+      tau: 1                      # Tau parameter for normalization
+      apply_frequency: 1          # Apply every N epochs (1 = every epoch)
 
 # --- Results Directory ---
 results_dir: 'results_kaggle' # Separate results dir for Kaggle runs
