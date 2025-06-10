@@ -88,8 +88,8 @@ augmentation:
   auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
   randaugment_magnitude: 9          # RandAugment magnitude (0-30)
   randaugment_num_ops: 2            # Number of RandAugment operations per image
-  mixup_alpha: 0                 # MixUp alpha parameter (0 = disabled)
-  cutmix_alpha: 0                 # CutMix alpha parameter (0 = disabled)
+  mixup_alpha: 0.2                 # MixUp alpha parameter (0 = disabled)
+  cutmix_alpha: 0.2                 # CutMix alpha parameter (0 = disabled)
   mixup_cutmix_prob: 0.5          # Probability of applying MixUp/CutMix
   switch_prob: 0.5                  # Probability of switching between MixUp and CutMix
   random_erase_prob: 0.25           # Random erasing probability
@@ -103,7 +103,7 @@ augmentation:
 # --- Training Configuration ---
 training:
   dropout_rate: 0.2 # Dropout rate for the model
-  num_epochs: 1 # Reduced for example
+  num_epochs: 100 # Reduced for example
   patience: 20   # Early stopping patience
   use_amp: false # Use Automatic Mixed Precision (requires CUDA)
   clip_grad_norm: 0 # Max norm for gradient clipping (set to 0 or null to disable)
@@ -113,7 +113,7 @@ training:
 # --- Regularization Configuration ---
 regularization:
   max_norm:
-    enabled: true              # Enable/disable max-norm regularization via PGD
+    enabled: false              # Enable/disable max-norm regularization via PGD
     thresh: 0.1                 # Threshold parameter for max-norm constraint
     lp_norm: 2                  # Lp norm to use (typically 2)
     tau: 1                      # Tau parameter for norm calculation
@@ -169,7 +169,7 @@ weighted_random_sampler:
 
 # --- Classifier-Only Training Configuration (NEW SECTION) ---
 classifier_only_training:
-  enabled: true               # Set to true to run this phase, false to skip
+  enabled: false               # Set to true to run this phase, false to skip
   num_epochs: 1              # Number of epochs for classifier fine-tuning
   patience: 20                # Early stopping patience for classifier fine-tuning
   use_amp: False             # Can be different from main training, if desired
@@ -221,7 +221,7 @@ classifier_only_training:
       tau: 1                      # Tau parameter for norm calculation
     
     tau_normalization:
-      enabled: true              # Enable/disable tau-normalization for classifier training
+      enabled: false              # Enable/disable tau-normalization for classifier training
       lp_norm: 2                  # Lp norm to use (typically 2)
       tau: 1                      # Tau parameter for normalization
       apply_frequency: 1          # Apply every N epochs (1 = every epoch)
