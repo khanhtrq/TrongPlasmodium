@@ -126,7 +126,7 @@ regularization:
 
 # --- Optimizer Configuration ---
 optimizer:
-  type: Adam
+  type: AdamW
   lr: 0.0001    # Typical default for Adam, adjust as needed
   params:
     weight_decay: 0.0005 # Typical value for Adam, adjust as needed
@@ -169,7 +169,7 @@ weighted_random_sampler:
 
 # --- Classifier-Only Training Configuration (NEW SECTION) ---
 classifier_only_training:
-  enabled: true               # Set to true to run this phase, false to skip
+  enabled: false               # Set to true to run this phase, false to skip
   num_epochs: 100              # Number of epochs for classifier fine-tuning
   patience: 20                # Early stopping patience for classifier fine-tuning
   use_amp: False             # Can be different from main training, if desired
