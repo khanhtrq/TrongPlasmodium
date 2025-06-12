@@ -1160,6 +1160,246 @@ def test_single_image_augmentation(image_path):
     print(f"🎉 Augmentation test completed!")
 
 
+def test_mixup_cutmix_wrapper(image_path1, image_path2, num_classes=6, output_dir="mixup_cutmix_test"):
+    """
+    Test MixupCutmixWrapper với 2 ảnh đầu vào và tạo ra 3 ảnh kết quả.
+    
+    Args:
+        image_path1 (str): Đường dẫn đến ảnh thứ nhất
+        image_path2 (str): Đường dẫn đến ảnh thứ hai  
+        num_classes (int): Số lượng classes cho wrapper
+        output_dir (str): Thư mục lưu kết quả
+        
+    Returns:
+        tuple: (mixup_result, cutmix_result, comparison_image)
+    """
+    import matplotlib.pyplot as plt
+    import os
+    from PIL import Image
+    import torch.nn.functional as F
+    
+    print(f"🧪 Testing MixUp/CutMix with:")
+    print(f"   Image 1: {image_path1}")
+    print(f"   Image 2: {image_path2}")
+    
+    # Tạo thư mục output
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Load và preprocess 2 ảnh
+    try:
+        img1 = Image.open(image_path1).convert('RGB')
+        img2 = Image.open(image_path2).convert('RGB')
+        print(f"✅ Loaded images: {img1.size}, {img2.size}")
+    except Exception as e:
+        print(f"❌ Error loading images: {e}")
+        return None, None, None
+    
+    # Tạo transform cho preprocessing
+    preprocess = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+    ])
+    
+    # Preprocess images
+    tensor1 = preprocess(img1).unsqueeze(0)  # Add batch dimension
+    tensor2 = preprocess(img2).unsqueeze(0)
+    
+    # Tạo batch từ 2 ảnh
+    batch_images = torch.cat([tensor1, tensor2], dim=0)  # Shape: [2, 3, 224, 224]
+    
+    # Tạo fake labels
+    batch_labels = torch.tensor([0, 1])  # 2 classes khác nhau
+    
+    print(f"📊 Batch shape: {batch_images.shape}")
+    print(f"📊 Labels shape: {batch_labels.shape}")
+    
+    # Test MixUp riêng biệt
+    print(f"\n🔄 Testing MixUp...")
+    try:
+        mixup_wrapper = MixupCutmixWrapper(
+            mixup_alpha=0.2,
+            cutmix_alpha=0.0,  # Tắt CutMix
+            prob=1.0,
+            switch_prob=0.0,  # Chỉ dùng MixUp
+            num_classes=num_classes
+        )
+        
+        if mixup_wrapper.is_enabled():
+            mixed_images_mixup, mixed_labels_mixup = mixup_wrapper(batch_images.clone(), batch_labels.clone())
+            print(f"✅ MixUp applied successfully")
+            mixup_result = mixed_images_mixup[0]  # Lấy ảnh đầu tiên
+        else:
+            print(f"⚠️ MixUp not available, using original")
+            mixup_result = batch_images[0]
+            
+    except Exception as e:
+        print(f"❌ Error with MixUp: {e}")
+        mixup_result = batch_images[0]
+    
+    # Test CutMix riêng biệt  
+    print(f"\n✂️ Testing CutMix...")
+    try:
+        cutmix_wrapper = MixupCutmixWrapper(
+            mixup_alpha=0.0,  # Tắt MixUp
+            cutmix_alpha=0.5,
+            prob=1.0,
+            switch_prob=1.0,  # Chỉ dùng CutMix
+            num_classes=num_classes
+        )
+        
+        if cutmix_wrapper.is_enabled():
+            mixed_images_cutmix, mixed_labels_cutmix = cutmix_wrapper(batch_images.clone(), batch_labels.clone())
+            print(f"✅ CutMix applied successfully")
+            cutmix_result = mixed_images_cutmix[0]  # Lấy ảnh đầu tiên
+        else:
+            print(f"⚠️ CutMix not available, using original")
+            cutmix_result = batch_images[0]
+            
+    except Exception as e:
+        print(f"❌ Error with CutMix: {e}")
+        cutmix_result = batch_images[0]
+    
+    # Hàm để denormalize tensor thành PIL Image
+    def tensor_to_pil(tensor):
+        """Convert normalized tensor to PIL Image"""
+        # Denormalize
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        denormalized = tensor * std + mean
+        denormalized = torch.clamp(denormalized, 0, 1)
+        
+        # Convert to PIL
+        img_array = denormalized.permute(1, 2, 0).numpy()
+        return Image.fromarray((img_array * 255).astype(np.uint8))
+    
+    # Convert results to PIL Images
+    img1_pil = tensor_to_pil(batch_images[0])
+    img2_pil = tensor_to_pil(batch_images[1])
+    mixup_pil = tensor_to_pil(mixup_result)
+    cutmix_pil = tensor_to_pil(cutmix_result)
+    
+    # Tạo ảnh comparison
+    print(f"\n🖼️ Creating comparison visualization...")
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    fig.suptitle('MixUp/CutMix Test Results', fontsize=16)
+    
+    # Hàng đầu: Input images và MixUp result
+    axes[0, 0].imshow(img1_pil)
+    axes[0, 0].set_title('Input Image 1')
+    axes[0, 0].axis('off')
+    
+    axes[0, 1].imshow(img2_pil)
+    axes[0, 1].set_title('Input Image 2')
+    axes[0, 1].axis('off')
+    
+    axes[0, 2].imshow(mixup_pil)
+    axes[0, 2].set_title('MixUp Result\n(Blended)')
+    axes[0, 2].axis('off')
+    
+    # Hàng thứ hai: CutMix result và combined view
+    axes[1, 0].imshow(cutmix_pil)
+    axes[1, 0].set_title('CutMix Result\n(Patch Mixed)')
+    axes[1, 0].axis('off')
+    
+    # So sánh side-by-side MixUp vs CutMix
+    comparison_img = Image.new('RGB', (mixup_pil.width * 2, mixup_pil.height))
+    comparison_img.paste(mixup_pil, (0, 0))
+    comparison_img.paste(cutmix_pil, (mixup_pil.width, 0))
+    
+    axes[1, 1].imshow(comparison_img)
+    axes[1, 1].set_title('MixUp vs CutMix\n(Side by Side)')
+    axes[1, 1].axis('off')
+    
+    # Thống kê
+    axes[1, 2].text(0.1, 0.9, 'Augmentation Stats:', fontsize=12, weight='bold', transform=axes[1, 2].transAxes)
+    axes[1, 2].text(0.1, 0.8, f'✅ MixUp: {"Enabled" if mixup_wrapper.is_enabled() else "Disabled"}', transform=axes[1, 2].transAxes)
+    axes[1, 2].text(0.1, 0.7, f'✅ CutMix: {"Enabled" if cutmix_wrapper.is_enabled() else "Disabled"}', transform=axes[1, 2].transAxes)
+    axes[1, 2].text(0.1, 0.6, f'📊 Input size: {batch_images.shape}', transform=axes[1, 2].transAxes)
+    axes[1, 2].text(0.1, 0.5, f'🎯 Classes: {num_classes}', transform=axes[1, 2].transAxes)
+    axes[1, 2].text(0.1, 0.4, f'🔧 MixUp α: 0.8', transform=axes[1, 2].transAxes)
+    axes[1, 2].text(0.1, 0.3, f'✂️ CutMix α: 1.0', transform=axes[1, 2].transAxes)
+    axes[1, 2].axis('off')
+    
+    # Lưu ảnh
+    plt.tight_layout()
+    comparison_path = os.path.join(output_dir, 'mixup_cutmix_comparison.png')
+    plt.savefig(comparison_path, dpi=150, bbox_inches='tight')
+    print(f"✅ Saved comparison to: {comparison_path}")
+    
+    # Lưu từng ảnh riêng lẻ
+    mixup_path = os.path.join(output_dir, 'mixup_result.jpg')
+    cutmix_path = os.path.join(output_dir, 'cutmix_result.jpg')
+    comparison_only_path = os.path.join(output_dir, 'side_by_side_comparison.jpg')
+    
+    mixup_pil.save(mixup_path)
+    cutmix_pil.save(cutmix_path)
+    comparison_img.save(comparison_only_path)
+    
+    print(f"✅ Saved individual results:")
+    print(f"   MixUp: {mixup_path}")
+    print(f"   CutMix: {cutmix_path}")
+    print(f"   Comparison: {comparison_only_path}")
+    
+    # Hiển thị plot
+    plt.show()
+    
+    print(f"\n🎉 MixUp/CutMix test completed!")
+    print(f"📁 All results saved in: {output_dir}")
+    
+    return mixup_pil, cutmix_pil, comparison_img
+
+
+def interactive_mixup_cutmix_test():
+    """
+    Hàm interactive để test MixUp/CutMix với input từ user.
+    """
+    import os
+    
+    print("🎮 Interactive MixUp/CutMix Test")
+    print("=" * 50)
+    
+    # Default paths
+    default_img1 = r"X:\datn\v2_malaria_full_class_classification\v2_malaria_full_class_classification\train\064\rbc_parasitized_F_S1\cell2.jpg"
+    default_img2 = r"X:\datn\v2_malaria_full_class_classification\v2_malaria_full_class_classification\test\084\rbc_parasitized_F_TJ\cell2.jpg"
+    
+    # Get first image path
+    print(f"\n📁 Enter path for first image:")
+    img1_path = input(f"(default: {os.path.basename(default_img1)}): ").strip()
+    if not img1_path:
+        img1_path = default_img1
+    elif not os.path.exists(img1_path):
+        print(f"❌ File not found, using default")
+        img1_path = default_img1
+    
+    # Get second image path  
+    print(f"\n📁 Enter path for second image:")
+    img2_path = input(f"(default: {os.path.basename(default_img2)}): ").strip()
+    if not img2_path:
+        img2_path = default_img2
+    elif not os.path.exists(img2_path):
+        print(f"❌ File not found, using default")
+        img2_path = default_img2
+    
+    # Get number of classes
+    try:
+        num_classes = int(input("\n🎯 Enter number of classes (default 6): ").strip() or "6")
+    except ValueError:
+        num_classes = 6
+        print("Using default: 6 classes")
+    
+    # Run test
+    print(f"\n🚀 Running MixUp/CutMix test...")
+    mixup_result, cutmix_result, comparison = test_mixup_cutmix_wrapper(
+        img1_path, img2_path, num_classes=num_classes
+    )
+    
+    if mixup_result is not None:
+        print(f"✅ Test completed successfully!")
+    else:
+        print(f"❌ Test failed!")
+
+
 if __name__ == "__main__":
     import sys
     
@@ -1181,13 +1421,16 @@ if __name__ == "__main__":
         print("Choose an option:")
         print("1. Test augmentation functions")
         print("2. Interactive image augmentation test")
+        print("3. Test MixUp/CutMix wrapper")
         
-        choice = input("Enter your choice (1-2): ").strip()
+        choice = input("Enter your choice (1-3): ").strip()
         
         if choice == "1":
             test_augmentations()
         elif choice == "2":
             interactive_augmentation_test()
+        elif choice == "3":
+            interactive_mixup_cutmix_test()
         else:
             print("Running basic augmentation tests...")
             test_augmentations()

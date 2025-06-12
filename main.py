@@ -1036,7 +1036,7 @@ def main():
                             log_path=cls_log_save_path,
                             clip_grad_norm=classifier_train_config.get('clip_grad_norm', clip_grad_norm),
                             train_ratio=classifier_train_config.get('train_ratio', train_ratio),
-                            init_best_val_metric=train_best_val_metric,  # Pass initial best metric from main training
+                            init_best_val_metric=0.0,  # Pass initial best metric from main training
                             max_norm_regularizer=cls_max_norm_reg,  # Pass max-norm regularizer
                             tau_normalizer=cls_tau_norm_reg,  # Pass tau-normalization regularizer
                             tau_norm_frequency=cls_tau_freq  # Pass tau-normalization frequency
