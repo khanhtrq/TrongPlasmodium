@@ -32,7 +32,7 @@ class MaxNorm_via_PGD():
         if len(self.perLayerThresh)==0:
             self.setPerLayerThresh(model)
         
-        for i, curLayer in enumerate([model.get_classifier()]): #here we only apply MaxNorm over the last two layers
+        for i, curLayer in enumerate([model.get_classifier()]): #here we only apply MaxNorm over the last 
             curparam = curLayer.weight.data
 
 
