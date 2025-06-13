@@ -793,8 +793,8 @@ def main():
                         classifier_module = model.get_classifier()
                         if isinstance(classifier_module, nn.Module):
                             print(f"   Unfreezing classifier parameters obtained from model.get_classifier()")
-                            print(f"   Re-initializing classifier weights with Xavier uniform initialization.")
-                            torch.nn.init.xavier_uniform_(classifier_module.weight.data)  # Initialize weights
+                            # print(f"   Re-initializing classifier weights with Xavier uniform initialization.")
+                            # torch.nn.init.xavier_uniform_(classifier_module.weight.data)  # Initialize weights
                             for param in classifier_module.parameters():
                                 param.requires_grad = True
                         else:
