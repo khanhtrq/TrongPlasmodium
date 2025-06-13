@@ -1020,7 +1020,9 @@ def main():
                     print(f"\n🔧 Initializing regularizers for classifier training...")
                     cls_regularizer_config = classifier_train_config.get('regularization', main_regularizer_config)
                     cls_max_norm_reg, cls_tau_norm_reg, cls_tau_freq = init_regularizers(cls_regularizer_config)
-
+                    if mixup_alpha > 0 or cutmix_alpha > 0:
+                        print(f"   🎭 MixUp/CutMix is enabled for classifier training with alpha={mixup_alpha}, cutmix_alpha={cutmix_alpha}")
+                        mixup_fn.enable = True
                     try:
                         model, history_cls = train_classifier_only(
                             model=model,
@@ -1041,7 +1043,8 @@ def main():
                             init_best_val_metric=0.0,  # Pass initial best metric from main training
                             max_norm_regularizer=cls_max_norm_reg,  # Pass max-norm regularizer
                             tau_normalizer=cls_tau_norm_reg,  # Pass tau-normalization regularizer
-                            tau_norm_frequency=cls_tau_freq  # Pass tau-normalization frequency
+                            tau_norm_frequency=cls_tau_freq,  # Pass tau-normalization frequency
+                            mixup_fn=mixup_fn  # Pass the MixUp/CutMix function
                         )
                         print(f"✅ Classifier-Only Fine-tuning completed for '{model_name}'.")
 

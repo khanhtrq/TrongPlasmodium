@@ -156,6 +156,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
             all_preds = []
             all_labels = []
             batch_count = 0
+            num_processed_samples = 0  # Initialize counter for processed samples
             phase_start_time = time.time()
 
             # Use tqdm for progress bar
@@ -170,7 +171,12 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                     continue
 
                 inputs = inputs.to(device, non_blocking=True)  # Use non_blocking for potential speedup
-                labels = labels.to(device, non_blocking=True)                # Zero the parameter gradients
+                labels = labels.to(device, non_blocking=True)
+                
+                # Track actual batch size for this iteration
+                current_batch_size = inputs.size(0)
+                
+                # Zero the parameter gradients
                 optimizer.zero_grad(set_to_none=True)  # More memory efficient
 
                 # Apply MixUp/CutMix if available and in training phase
@@ -197,7 +203,9 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                             warnings.warn(f"   Exceeded NaN/Inf tolerance ({max_nan_inf_tolerance}). Consider checking model stability, learning rate, or data.")
                         del outputs, loss
                         torch.cuda.empty_cache()  # Try to clear cache if OOM might be related
-                        continue  # Skip backprop and metric calculation for this batch                    # Get predictions for metrics calculation (use cpu for sklearn)
+                        continue  # Skip backprop and metric calculation for this batch
+                    
+                    # Get predictions for metrics calculation (use cpu for sklearn)
                     # Note: Skip prediction metrics during training if MixUp/CutMix is applied
                     # since labels are mixed and traditional accuracy calculation doesn't apply
                     if phase == 'val' or (phase == 'train' and (mixup_fn is None or not mixup_fn.is_enabled())):
@@ -234,7 +242,8 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                         
                         if tau_normalizer is not None and (epoch + 1) % tau_norm_frequency == 0:
                             tau_normalizer.apply_on(model)# Statistics
-                running_loss += loss.item() * inputs.size(0)
+                running_loss += loss.item() * current_batch_size
+                num_processed_samples += current_batch_size
                 batch_count += 1
                 pbar.set_postfix({'loss': f'{loss.item():.4f}'})
                 
@@ -250,7 +259,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
 
             # --- Epoch End Calculation ---
             phase_duration = time.time() - phase_start_time
-            num_processed_samples = len(all_labels)  # Use the actual number of processed samples
+            # num_processed_samples is now properly tracked above
 
             if batch_count == 0 or num_processed_samples == 0:
                 print(f"⚠️ No valid batches processed in {phase} phase for epoch {epoch+1} (batch_count={batch_count}, processed_samples={num_processed_samples}). Skipping metrics calculation.")
@@ -400,6 +409,7 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
                           num_epochs=25, patience=5, use_amp=True, save_path='best_classifier_model.pth',
                           log_path='classifier_training_log.csv', clip_grad_norm=1.0, train_ratio=1.0,
                           criterion_b=None, first_stage_epochs=0, init_best_val_metric=0.0,
+                          mixup_fn=None,  # Add MixUp support
                           max_norm_regularizer=None, tau_normalizer=None, tau_norm_frequency=1):  # Add regularizer parameters
     """
     Trains ONLY THE CLASSIFIER part of the model, assuming feature extractor layers are frozen.
@@ -410,6 +420,11 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
       have their 'requires_grad' attribute set to False.
     - The 'optimizer' should be initialized ONLY with the parameters of the classifier
       (i.e., parameters for which 'requires_grad' is True).
+
+    Additional parameters:
+        criterion_b: Secondary criterion to use after first_stage_epochs
+        first_stage_epochs: Number of epochs to use criterion_a (primary criterion) before switching
+        mixup_fn: MixupCutmixWrapper instance for data augmentation during training
 
     Example of model preparation before calling:
     ```python
@@ -496,11 +511,20 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
     print(f"   Device: {device}, AMP: {use_amp}, Grad Clip Norm: {clip_grad_norm}")
     print(f"   Optimizer: {type(optimizer).__name__}, LR Scheduler: {type(scheduler).__name__}")
     
+    # Print criterion configuration
     if criterion_b is not None and first_stage_epochs > 0:
         print(f"   Criterion A (first {first_stage_epochs} epochs): {type(criterion).__name__}")
         print(f"   Criterion B (remaining epochs): {type(criterion_b).__name__}")
     else:
         print(f"   Criterion: {type(criterion).__name__}")
+        
+    # Print MixUp configuration
+    if mixup_fn is not None:
+        print(f"   MixUp/CutMix: {'Enabled' if mixup_fn.is_enabled() else 'Disabled'}")
+        if mixup_fn.is_enabled():
+            print(f"   MixUp α: {mixup_fn.mixup_alpha}, CutMix α: {mixup_fn.cutmix_alpha}")
+    else:
+        print(f"   MixUp/CutMix: Not provided")
         
     print(f"   Best Classifier Model Path: {save_path}")
     print(f"   Classifier Log Path: {log_path}")
@@ -564,6 +588,7 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
             all_preds = []
             all_labels = []
             batch_count = 0
+            num_processed_samples = 0  # Initialize counter for processed samples
             phase_start_time = time.time()
 
             pbar_total = math.ceil(current_dataset_size / current_loader.batch_size) if current_loader.batch_size > 0 else 0
@@ -577,8 +602,15 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
 
                 inputs = inputs.to(device, non_blocking=True)
                 labels = labels.to(device, non_blocking=True)
+                
+                # Track actual batch size for this iteration
+                current_batch_size = inputs.size(0)
 
                 optimizer.zero_grad(set_to_none=True)
+
+                # Apply MixUp/CutMix if available and in training phase
+                if phase == 'train' and mixup_fn is not None and mixup_fn.is_enabled():
+                    inputs, labels = mixup_fn(inputs, labels)
 
                 with torch.set_grad_enabled(phase == 'train'):
                     amp_dtype = torch.float16 if is_cuda else torch.bfloat16
@@ -596,10 +628,18 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
                         if is_cuda: torch.cuda.empty_cache()
                         continue
 
-                    preds = outputs.argmax(dim=1).detach().cpu().numpy()
-                    labels_cpu = labels.detach().cpu().numpy()
-                    all_preds.extend(preds)
-                    all_labels.extend(labels_cpu)
+                    # Get predictions for metrics calculation (use cpu for sklearn)
+                    # Note: Skip prediction metrics during training if MixUp/CutMix is applied
+                    # since labels are mixed and traditional accuracy calculation doesn't apply
+                    if phase == 'val' or (phase == 'train' and (mixup_fn is None or not mixup_fn.is_enabled())):
+                        preds = outputs.argmax(dim=1).detach().cpu().numpy()
+                        # Handle different label formats
+                        if labels.dim() > 1 and labels.size(1) > 1:  # If labels are one-hot or mixed (2D with multiple classes)
+                            labels_cpu = labels.argmax(dim=1).detach().cpu().numpy()
+                        else:  # If labels are standard class indices (1D)
+                            labels_cpu = labels.detach().cpu().numpy()
+                        all_preds.extend(preds)
+                        all_labels.extend(labels_cpu)
 
                     if phase == 'train':
                         if is_cuda and use_amp:
@@ -627,15 +667,24 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
                         if tau_normalizer is not None and (epoch + 1) % tau_norm_frequency == 0:
                             tau_normalizer.apply_on(model)
 
-                running_loss += loss.item() * inputs.size(0)
+                # Statistics - update counters after successful processing
+                running_loss += loss.item() * current_batch_size
+                num_processed_samples += current_batch_size
                 batch_count += 1
                 pbar.set_postfix({'loss': f'{loss.item():.4f}'})
-                del inputs, labels, outputs, loss, preds, labels_cpu
+                
+                # Clean up variables
+                del outputs, loss
+                if 'preds' in locals():
+                    del preds
+                if 'labels_cpu' in locals():
+                    del labels_cpu
+                del inputs, labels
                 if is_cuda:
                     torch.cuda.empty_cache()
 
             phase_duration = time.time() - phase_start_time
-            num_processed_samples = len(all_labels)
+            # num_processed_samples is now properly tracked above
 
             if batch_count == 0 or num_processed_samples == 0:
                 print(f"⚠️ No valid batches processed in {phase} phase for epoch {epoch+1}. Skipping metrics.")
@@ -709,9 +758,15 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
                     else:
                         torch.save(model_to_save.state_dict(), save_path)
                     epochs_no_improve = 0
+                    if mixup_fn is not None:
+                        mixup_fn.enabled = True  # Re-enable MixUp/CutMix if it was disabled
                 else:
                     epochs_no_improve += 1
                     print(f'📉 {primary_metric} did not improve for {epochs_no_improve} epoch(s). Best: {best_val_metric:.4f}')
+                    if epochs_no_improve == patience - 5:
+                        if mixup_fn is not None:
+                            print(f'📊 {epochs_no_improve} epochs without improvement. Disabling MixUp/CutMix to stabilize training.')
+                            mixup_fn.enabled = False  # Disable MixUp/CutMix if no improvement for 5 epochs
 
         epoch_duration = time.time() - epoch_start_time
         print(f"Epoch {epoch+1} duration: {epoch_duration:.2f}s")
