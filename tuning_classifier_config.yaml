@@ -213,6 +213,6 @@ device:
 pretrained_model:
   enabled: true                    # Set to true to load from checkpoint
   model_name: 'efficientnet_b1.ra4_e3600_r240_in1k'  # Model architecture name (must match one in model_names)
-  model_path: 'model\efficientnet_b1.ra4_e3600_r240_in1k_best.pth'
+  model_path: 'model/efficientnet_b1.ra4_e3600_r240_in1k_best.pth'
   # Note: If enabled=true, only the specified model_name will be trained
 
