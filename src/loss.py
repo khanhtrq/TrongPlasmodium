@@ -299,7 +299,7 @@ def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, beta, gam
     return cb_loss
 
 class ClassBalancedLoss(nn.Module):
-    def __init__(self, samples_per_cls, num_classes, loss_type='sigmoid', beta=0.9999, gamma=2.0):
+    def __init__(self, samples_per_cls, num_classes, loss_type='focal', beta=0.9999, gamma=2.0):
         super(ClassBalancedLoss, self).__init__()
         self.samples_per_cls = samples_per_cls
         self.num_classes = num_classes
