@@ -277,7 +277,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
 
             # Calculate loss based on processed samples
             epoch_loss = running_loss / num_processed_samples
-
+            print(f'{all_labels}, {all_preds}')  # Debugging line to check labels and predictions
             # Calculate metrics based on processed samples
             if len(all_preds) > 0 and len(all_labels) > 0:
                 precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(
