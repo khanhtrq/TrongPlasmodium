@@ -73,13 +73,13 @@ model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
   # - mobilenetv3_large_100.miil_in21k_ft_in1k
-  # - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
+  - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
   # - densenet121
   # - ghostnetv3_100.in1k
   # -  convnextv2_nano.fcmae_ft_in22k_in1k
   # - efficientnet_b0.ra_in1k
   # - resnet50d.ra4_e3600_r224_in1k
-  - efficientnet_b1.ra4_e3600_r240_in1k
+  # - efficientnet_b1.ra4_e3600_r240_in1k
   # - mobilenetv3_small_050
   # - mobilenetv3_large_150d.ra4_e3600_r256_in1k
 # --- Data Augmentation Configuration ---
@@ -170,7 +170,7 @@ weighted_random_sampler:
 
 # --- Classifier-Only Training Configuration (NEW SECTION) ---
 classifier_only_training:
-  enabled: true               # Set to true to run this phase, false to skip
+  enabled: false               # Set to true to run this phase, false to skip
   num_epochs: 100              # Number of epochs for classifier fine-tuning
   patience: 20                # Early stopping patience for classifier fine-tuning
   use_amp: False             # Can be different from main training, if desired
