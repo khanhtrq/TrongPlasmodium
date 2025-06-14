@@ -181,7 +181,11 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
 
                 # Apply MixUp/CutMix if available and in training phase
                 if phase == 'train' and mixup_fn is not None and mixup_fn.is_enabled():
+                    # Store original labels before MixUp for metric calculation
+                    original_labels = labels.clone()
                     inputs, labels = mixup_fn(inputs, labels)
+                else:
+                    original_labels = labels
 
                 # Forward pass
                 # Track history only in train phase
@@ -205,18 +209,15 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
                         torch.cuda.empty_cache()  # Try to clear cache if OOM might be related
                         continue  # Skip backprop and metric calculation for this batch
                     
-                    # Get predictions for metrics calculation (use cpu for sklearn)
-                    # Note: Skip prediction metrics during training if MixUp/CutMix is applied
-                    # since labels are mixed and traditional accuracy calculation doesn't apply
-                    if phase == 'val' or (phase == 'train' and (mixup_fn is None or not mixup_fn.is_enabled())):
-                        preds = outputs.argmax(dim=1).detach().cpu().numpy()
-                        # Handle different label formats
-                        if labels.dim() > 1 and labels.size(1) > 1:  # If labels are one-hot or mixed (2D with multiple classes)
-                            labels_cpu = labels.argmax(dim=1).detach().cpu().numpy()
-                        else:  # If labels are standard class indices (1D)
-                            labels_cpu = labels.detach().cpu().numpy()
-                        all_preds.extend(preds)
-                        all_labels.extend(labels_cpu)                    # Backward pass + optimize only if in training phase
+                    # Get predictions for metrics calculation (use original labels even with MixUp)
+                    preds = outputs.argmax(dim=1).detach().cpu().numpy()
+                    # Use original labels for metric calculation
+                    if original_labels.dim() > 1 and original_labels.size(1) > 1:  # If labels are one-hot
+                        labels_cpu = original_labels.argmax(dim=1).detach().cpu().numpy()
+                    else:  # If labels are standard class indices (1D)
+                        labels_cpu = original_labels.detach().cpu().numpy()
+                    all_preds.extend(preds)
+                    all_labels.extend(labels_cpu)                    # Backward pass + optimize only if in training phase
                     if phase == 'train':
                         if is_cuda and use_amp:
                             scaler.scale(loss).backward()
@@ -277,7 +278,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
 
             # Calculate loss based on processed samples
             epoch_loss = running_loss / num_processed_samples
-            print(f'{all_labels}, {all_preds}')  # Debugging line to check labels and predictions
+            # print(f'{all_labels}, {all_preds}')  # Debugging line to check labels and predictions
             # Calculate metrics based on processed samples
             if len(all_preds) > 0 and len(all_labels) > 0:
                 precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(
@@ -610,7 +611,11 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
 
                 # Apply MixUp/CutMix if available and in training phase
                 if phase == 'train' and mixup_fn is not None and mixup_fn.is_enabled():
+                    # Store original labels before MixUp for metric calculation
+                    original_labels = labels.clone()
                     inputs, labels = mixup_fn(inputs, labels)
+                else:
+                    original_labels = labels
 
                 with torch.set_grad_enabled(phase == 'train'):
                     amp_dtype = torch.float16 if is_cuda else torch.bfloat16
@@ -628,18 +633,15 @@ def train_classifier_only(model, dataloaders, criterion, optimizer, scheduler, d
                         if is_cuda: torch.cuda.empty_cache()
                         continue
 
-                    # Get predictions for metrics calculation (use cpu for sklearn)
-                    # Note: Skip prediction metrics during training if MixUp/CutMix is applied
-                    # since labels are mixed and traditional accuracy calculation doesn't apply
-                    if phase == 'val' or (phase == 'train' and (mixup_fn is None or not mixup_fn.is_enabled())):
-                        preds = outputs.argmax(dim=1).detach().cpu().numpy()
-                        # Handle different label formats
-                        if labels.dim() > 1 and labels.size(1) > 1:  # If labels are one-hot or mixed (2D with multiple classes)
-                            labels_cpu = labels.argmax(dim=1).detach().cpu().numpy()
-                        else:  # If labels are standard class indices (1D)
-                            labels_cpu = labels.detach().cpu().numpy()
-                        all_preds.extend(preds)
-                        all_labels.extend(labels_cpu)
+                    # Get predictions for metrics calculation (use original labels even with MixUp)
+                    preds = outputs.argmax(dim=1).detach().cpu().numpy()
+                    # Use original labels for metric calculation
+                    if original_labels.dim() > 1 and original_labels.size(1) > 1:  # If labels are one-hot
+                        labels_cpu = original_labels.argmax(dim=1).detach().cpu().numpy()
+                    else:  # If labels are standard class indices (1D)
+                        labels_cpu = original_labels.detach().cpu().numpy()
+                    all_preds.extend(preds)
+                    all_labels.extend(labels_cpu)
 
                     if phase == 'train':
                         if is_cuda and use_amp:
