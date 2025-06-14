@@ -331,6 +331,7 @@ class BMCLoss(_Loss):
         self.noise_sigma = torch.nn.Parameter(torch.tensor(init_noise_sigma))
 
     def forward(self, input, target):
+        print(input, target)
         num_classes = input.size(1)
         target_onehot = F.one_hot(target, num_classes=num_classes).float()
         noise_var = self.noise_sigma ** 2
