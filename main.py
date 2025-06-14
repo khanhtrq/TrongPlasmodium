@@ -1044,7 +1044,7 @@ def main():
                             max_norm_regularizer=cls_max_norm_reg,  # Pass max-norm regularizer
                             tau_normalizer=cls_tau_norm_reg,  # Pass tau-normalization regularizer
                             tau_norm_frequency=cls_tau_freq,  # Pass tau-normalization frequency
-                            mixup_fn=None  # Pass the MixUp/CutMix function
+                            mixup_fn=mixup_fn  # Pass the MixUp/CutMix function
                         )
                         print(f"✅ Classifier-Only Fine-tuning completed for '{model_name}'.")
 
