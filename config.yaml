@@ -1,13 +1,13 @@
 # --- Dataset Configuration ---
-data_dir: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification' # Base dir for relative paths if needed
+data_dir: '/kaggle/input/bbbc041/dataset_resplit' # Base dir for relative paths if needed
 
 # --- Datasets Configuration (List) ---
 datasets:
-  - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
-    annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
-    annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
-    annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
-    annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
+  # - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
+  #   annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
+  #   annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
+  #   annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
+  #   annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
 
   # - type: 'annotation' # First dataset definition (e.g., SMOTE for training)
   #   # Settings for 'annotation' type
@@ -20,11 +20,11 @@ datasets:
   #   # annotation_test_root: '/kaggle/input/datn-cell/Our_Plasmodium_Classification_Khanh_Thesis_Jan2025/cropped_RBCs'
 
 
-  # - type: 'imagefolder' # Optional: Example ImageFolder definition
-  #   imagefolder_root: '/kaggle/input/bbbc041/dataset_resplit'
-  #   imagefolder_train_subdir: 'train'
-  #   imagefolder_val_subdir: 'val'
-  #   imagefolder_test_subdir: 'test'
+  - type: 'imagefolder' # Optional: Example ImageFolder definition
+    imagefolder_root: '/kaggle/input/bbbc041/dataset_resplit'
+    imagefolder_train_subdir: 'train'
+    imagefolder_val_subdir: 'val'
+    imagefolder_test_subdir: 'test'
 
 batch_size: 32
 num_workers: 4 # Adjusted based on typical Kaggle limits
@@ -42,17 +42,24 @@ seed: 42 # Random seed for reproducible results
 #   - "Other"
 # --- Class Configuration ---
 class_names:
-  - "rbc_parasitized_F_TJ"
-  - "rbc_parasitized_F_TA"
-  - "rbc_parasitized_F_S1_or_S2"
-  - "rbc_parasitized_F_G1_or_G2"
-  - "rbc_unparasitized"
-  - "rbc_unparasitized_artefact_dead_kernel"
+  # - "rbc_parasitized_F_TJ"
+  # - "rbc_parasitized_F_TA"
+  # - "rbc_parasitized_F_S1_or_S2"
+  # - "rbc_parasitized_F_G1_or_G2"
+  # - "rbc_unparasitized"
+  # - "rbc_unparasitized_artefact_dead_kernel"
   # - "rbc_difficult" # New class for difficult-to-classify images
+  - 'difficult'
+  - 'Gametocyte'
+  - 'leukocyte'
+  - 'red blood cell'
+  - 'ring'
+  - 'schizont'
+  - 'trophozoite'
 
 # --- Class Remapping Configuration (NEW) ---
 class_remapping:
-  enabled: true                    # Set to true to enable class remapping
+  enabled: false                    # Set to true to enable class remapping
   mapping:                         # Dictionary mapping: original_class_index -> new_class_index
     5: 4                          # Map class 5 to class 4 (merge artefact into unparasitized)
   # Example of more complex remapping:
@@ -73,13 +80,13 @@ model_names:
   # - mobilenetv4_hybrid_large.e600_r384_in1k # Example timm model
   # - resnet50 # Example torchvision model
   # - mobilenetv3_large_100.miil_in21k_ft_in1k
-  - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
+  # - mobilenetv4_hybrid_medium.ix_e550_r384_in1k
   # - densenet121
   # - ghostnetv3_100.in1k
   # -  convnextv2_nano.fcmae_ft_in22k_in1k
   # - efficientnet_b0.ra_in1k
   # - resnet50d.ra4_e3600_r224_in1k
-  # - efficientnet_b1.ra4_e3600_r240_in1k
+  - efficientnet_b1.ra4_e3600_r240_in1k
   # - mobilenetv3_small_050
   # - mobilenetv3_large_150d.ra4_e3600_r256_in1k
 # --- Data Augmentation Configuration ---

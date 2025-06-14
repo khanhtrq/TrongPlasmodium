@@ -10,7 +10,7 @@ datasets:
     annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
 
 
-batch_size: 8
+batch_size: 32
 num_workers: 8 # Set to 0 to avoid multiprocessing issues on Windows
 
 # --- Reproducibility Configuration ---
