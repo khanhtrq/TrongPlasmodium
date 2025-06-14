@@ -11,7 +11,7 @@ datasets:
 
 
 batch_size: 32
-num_workers: 0 # Set to 0 to avoid multiprocessing issues on Windows
+num_workers: 8 # Set to 0 to avoid multiprocessing issues on Windows
 
 # --- Reproducibility Configuration ---
 seed: 42 # Random seed for reproducible results
