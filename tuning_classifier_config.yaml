@@ -152,7 +152,7 @@ classifier_only_training:
   
   # WeightedRandomSampler for classifier training (inherits from main config if not specified)
   weighted_random_sampler:
-    enabled: false                    # Enable/disable for classifier training specifically
+    enabled: true                    # Enable/disable for classifier training specifically
     replacement: true                 # Whether to sample with replacement
     weight_calculation: 'inverse'     # Options: 'inverse', 'balanced', 'custom'
     apply_sqrt: false                 # Apply square root to computed weights
