@@ -183,7 +183,7 @@ classifier_only_training:
     enabled: true                    # Enable/disable for classifier training specifically
     replacement: true                 # Whether to sample with replacement
     weight_calculation: 'inverse'     # Options: 'inverse', 'balanced', 'custom'
-    apply_sqrt: true                 # Apply square root to computed weights
+    apply_sqrt: false                 # Apply square root to computed weights
     min_weight: 0.1                   # Minimum weight value
     max_weight: 10.0                  # Maximum weight value
 
@@ -216,13 +216,13 @@ classifier_only_training:
   # Regularization for classifier training (inherits from main config if not specified)
   regularization:
     max_norm:
-      enabled: true              # Enable/disable max-norm regularization for classifier training
+      enabled: false              # Enable/disable max-norm regularization for classifier training
       thresh: 0.1                 # Threshold parameter for max-norm constraint
       lp_norm: 2                  # Lp norm to use (typically 2)
       tau: 1                      # Tau parameter for norm calculation
     
     tau_normalization:
-      enabled: false              # Enable/disable tau-normalization for classifier training
+      enabled: true              # Enable/disable tau-normalization for classifier training
       lp_norm: 2                  # Lp norm to use (typically 2)
       tau: 1                      # Tau parameter for normalization
       apply_frequency: 1          # Apply every N epochs (1 = every epoch)
