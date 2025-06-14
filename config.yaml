@@ -80,7 +80,7 @@ model_names:
   # - efficientnet_b0.ra_in1k
   # - resnet50d.ra4_e3600_r224_in1k
   # - efficientnet_b1.ra4_e3600_r240_in1k
-  - mobilenetv3_small_100.miil_in21k_ft_in1k
+  - mobilenetv3_small_050
   # - mobilenetv3_large_150d.ra4_e3600_r256_in1k
 # --- Data Augmentation Configuration ---
 augmentation:
