@@ -61,3 +61,7 @@ mlruns/
 tensorboard_logs/
 results/
 results_*/ # Catch results_local, results_kaggle, etc.
+
+#Allow
+
+!model/*
