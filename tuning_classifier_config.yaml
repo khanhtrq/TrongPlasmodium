@@ -1,13 +1,13 @@
 # --- Dataset Configuration ---
-data_dir: "X:/datn/v2_malaria_full_class_classification/v2_malaria_full_class_classification"
+data_dir: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification' # Base dir for relative paths if needed
 
 # --- Datasets Configuration (List) ---
 datasets:
   - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
-    annotation_train: "X:/datn/v2_malaria_full_class_classification/v2_malaria_full_class_classification/train_annotation_6classes.txt"
-    annotation_val: "X:/datn/v2_malaria_full_class_classification/v2_malaria_full_class_classification/val_annotation_6classes.txt"
-    annotation_test: "X:/datn/v2_malaria_full_class_classification/v2_malaria_full_class_classification/test_annotation_6classes.txt"
-    annotation_root: "X:/datn/v2_malaria_full_class_classification/v2_malaria_full_class_classification"
+    annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
+    annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
+    annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
+    annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
 
 
 batch_size: 32
