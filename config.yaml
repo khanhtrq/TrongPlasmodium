@@ -50,7 +50,7 @@ class_names:
   # - "rbc_unparasitized_artefact_dead_kernel"
   # - "rbc_difficult" # New class for difficult-to-classify images
   - 'difficult'
-  - 'Gametocyte'
+  - 'gametocyte'
   - 'leukocyte'
   - 'red blood cell'
   - 'ring'
