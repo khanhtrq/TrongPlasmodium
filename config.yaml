@@ -183,7 +183,7 @@ classifier_only_training:
     enabled: true                    # Enable/disable for classifier training specifically
     replacement: true                 # Whether to sample with replacement
     weight_calculation: 'inverse'     # Options: 'inverse', 'balanced', 'custom'
-    apply_sqrt: false                 # Apply square root to computed weights
+    apply_sqrt: true                 # Apply square root to computed weights
     min_weight: 0.1                   # Minimum weight value
     max_weight: 10.0                  # Maximum weight value
 
