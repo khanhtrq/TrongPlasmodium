@@ -74,7 +74,7 @@ def set_seed(seed):
     print(f"✅ Seed {seed} has been set for all random number generators.")
 
 
-def load_config(config_path='tuning_classifier_config.yaml'):
+def load_config(config_path='tuning_classifier_notrain_config.yaml'):
     """Loads YAML configuration file."""
     print(f"Loading configuration from: {config_path}")
     try:
@@ -490,7 +490,7 @@ def main():
         print("🔄 Classifier reinitialization enabled via --re_init flag")
     
     # --- Configuration Loading ---
-    config_file = 'tuning_classifier_config.yaml'  # Use the correct config file
+    config_file = 'tuning_classifier_notrain_config.yaml'  # Use the correct config file
     config = load_config(config_file)
 
     # --- Set Seed for Reproducibility ---
@@ -974,29 +974,37 @@ def main():
                 print(f"   Epochs: {num_epochs}, Patience: {patience}")
                 print(f"   Batch size: {current_batch_size}, Train ratio: {cls_train_ratio}")
 
-                # --- Start Training ---
-                model, history = train_classifier_only(
-                    model=model,
-                    dataloaders=dataloaders,
-                    criterion=criterion_a,
-                    criterion_b=criterion_b,
-                    first_stage_epochs=cls_first_stage_epochs,
-                    optimizer=optimizer,
-                    scheduler=scheduler,
-                    device=device,
-                    num_epochs=num_epochs,
-                    patience=patience,
-                    use_amp=use_amp,
-                    save_path=model_save_path,
-                    log_path=log_save_path,
-                    clip_grad_norm=clip_grad_norm,
-                    train_ratio=cls_train_ratio,
-                    init_best_val_metric=0.0,
-                    max_norm_regularizer=max_norm_reg,
-                    tau_normalizer=tau_norm_reg,
-                    tau_norm_frequency=tau_freq,
-                    mixup_fn=None  # Typically disabled for classifier-only training
-                )
+                
+                if max_norm_reg:
+                    print(f"   MaxNorm regularizer enabled with threshold: {max_norm_reg}")
+                    max_norm_reg.PGD(model)  # Apply MaxNorm regularization
+                if tau_norm_reg:
+                    print(f"   Tau-normalization regularizer enabled with tau: {tau_norm_reg}, frequency: {tau_freq}")
+                    tau_norm_reg.apply_on(model)  # Apply Tau-normalization regularization
+
+                # # --- Start Training ---
+                # model, history = train_classifier_only(
+                #     model=model,
+                #     dataloaders=dataloaders,
+                #     criterion=criterion_a,
+                #     criterion_b=criterion_b,
+                #     first_stage_epochs=cls_first_stage_epochs,
+                #     optimizer=optimizer,
+                #     scheduler=scheduler,
+                #     device=device,
+                #     num_epochs=num_epochs,
+                #     patience=patience,
+                #     use_amp=use_amp,
+                #     save_path=model_save_path,
+                #     log_path=log_save_path,
+                #     clip_grad_norm=clip_grad_norm,
+                #     train_ratio=cls_train_ratio,
+                #     init_best_val_metric=0.0,
+                #     max_norm_regularizer=max_norm_reg,
+                #     tau_normalizer=tau_norm_reg,
+                #     tau_norm_frequency=tau_freq,
+                #     mixup_fn=None  # Typically disabled for classifier-only training
+                # )
 
                 model_trained_successfully = True
                 print(f"✅ Classifier fine-tuning completed successfully for '{model_name}' with batch size {current_batch_size}.")
