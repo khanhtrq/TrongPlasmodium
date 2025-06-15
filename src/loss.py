@@ -306,6 +306,7 @@ class ClassBalancedLoss(nn.Module):
         self.loss_type = loss_type
         self.beta = beta
         self.gamma = gamma
+        print(f"Initialized ClassBalancedLoss with loss_type={loss_type}, beta={beta}, gamma={gamma}")
         if not isinstance(samples_per_cls, (list, np.ndarray, torch.Tensor)):
             raise TypeError("samples_per_cls must be a list, numpy array or torch tensor.")
         if len(samples_per_cls) != num_classes:
