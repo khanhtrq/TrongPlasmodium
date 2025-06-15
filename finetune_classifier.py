@@ -961,8 +961,6 @@ def main():
                 cls_regularizer_config = classifier_train_config.get('regularization', {})
                 max_norm_reg, tau_norm_reg, tau_freq = init_regularizers(cls_regularizer_config)
 
-                if max_norm_reg:
-                    optimizer.add_param_group({'params': max_norm_reg.tau, 'lr': 1e-2, 'name': 'max_norm_regularizer'})
                 
                 # --- Training Configuration ---
                 num_epochs = classifier_train_config.get('num_epochs', 10)
