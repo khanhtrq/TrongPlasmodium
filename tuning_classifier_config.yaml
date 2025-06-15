@@ -188,7 +188,7 @@ classifier_only_training:
   # Regularization for classifier training (inherits from main config if not specified)
   regularization:
     max_norm:
-      enabled: false              # Enable/disable max-norm regularization for classifier training
+      enabled: true              # Enable/disable max-norm regularization for classifier training
       thresh: 0.1                 # Threshold parameter for max-norm constraint
       lp_norm: 2                  # Lp norm to use (typically 2)
       tau: 1                      # Tau parameter for norm calculation

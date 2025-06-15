@@ -196,7 +196,7 @@ classifier_only_training:
     tau_normalization:
       enabled: true              # Enable/disable tau-normalization for classifier training
       lp_norm: 2                  # Lp norm to use (typically 2)
-      tau: 1                      # Tau parameter for normalization
+      tau: 2                      # Tau parameter for normalization
       apply_frequency: 1          # Apply every N epochs (1 = every epoch)
 
 # --- Results Directory ---
