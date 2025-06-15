@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Subset, SubsetRandomSampler
 from torchvision import transforms, datasets
+import argparse
 
 # Configure matplotlib for headless environments
 import matplotlib
@@ -414,7 +415,80 @@ def find_pretrained_model_path(model_name, results_dir='./results'):
     return None
 
 
+def reinitialize_classifier(model, model_name="unknown"):
+    """
+    Reinitialize the classifier layer parameters.
+    
+    Args:
+        model: The model whose classifier should be reinitialized
+        model_name: Name of the model for logging purposes
+    """
+    print(f"🔄 Reinitializing classifier parameters for {model_name}...")
+    
+    classifier_reinitialized = False
+    
+    # Try to get classifier using get_classifier() method
+    if hasattr(model, 'get_classifier') and callable(model.get_classifier):
+        try:
+            classifier_module = model.get_classifier()
+            if isinstance(classifier_module, nn.Module):
+                # Reinitialize weights and biases
+                if hasattr(classifier_module, 'weight') and classifier_module.weight is not None:
+                    nn.init.xavier_uniform_(classifier_module.weight)
+                    print(f"   ✅ Reinitialized classifier weights using Xavier uniform")
+                if hasattr(classifier_module, 'bias') and classifier_module.bias is not None:
+                    nn.init.zeros_(classifier_module.bias)
+                    print(f"   ✅ Reinitialized classifier bias to zeros")
+                classifier_reinitialized = True
+            else:
+                print(f"   ⚠️ get_classifier() returned non-Module: {type(classifier_module)}")
+        except Exception as e:
+            warnings.warn(f"   ⚠️ Error calling model.get_classifier(): {e}")
+    
+    # Manual approach for common architectures if get_classifier failed
+    if not classifier_reinitialized:
+        print("   🔧 Trying manual classifier reinitialization...")
+        if hasattr(model, 'classifier') and isinstance(model.classifier, nn.Module):
+            if hasattr(model.classifier, 'weight') and model.classifier.weight is not None:
+                nn.init.xavier_uniform_(model.classifier.weight)
+                print(f"   ✅ Reinitialized model.classifier weights")
+            if hasattr(model.classifier, 'bias') and model.classifier.bias is not None:
+                nn.init.zeros_(model.classifier.bias)
+                print(f"   ✅ Reinitialized model.classifier bias")
+            classifier_reinitialized = True
+        elif hasattr(model, 'fc') and isinstance(model.fc, nn.Module):
+            if hasattr(model.fc, 'weight') and model.fc.weight is not None:
+                nn.init.xavier_uniform_(model.fc.weight)
+                print(f"   ✅ Reinitialized model.fc weights")
+            if hasattr(model.fc, 'bias') and model.fc.bias is not None:
+                nn.init.zeros_(model.fc.bias)
+                print(f"   ✅ Reinitialized model.fc bias")
+            classifier_reinitialized = True
+        elif hasattr(model, 'head') and isinstance(model.head, nn.Module):
+            if hasattr(model.head, 'weight') and model.head.weight is not None:
+                nn.init.xavier_uniform_(model.head.weight)
+                print(f"   ✅ Reinitialized model.head weights")
+            if hasattr(model.head, 'bias') and model.head.bias is not None:
+                nn.init.zeros_(model.head.bias)
+                print(f"   ✅ Reinitialized model.head bias")
+            classifier_reinitialized = True
+    
+    if not classifier_reinitialized:
+        warnings.warn("   ⚠️ Could not find classifier layer to reinitialize")
+    else:
+        print(f"   🎯 Classifier reinitialization completed for {model_name}")
+
+
 def main():
+    # --- Command Line Arguments ---
+    parser = argparse.ArgumentParser(description='Fine-tune classifier only')
+    parser.add_argument('--re_init', action='store_true', 
+                       help='Reinitialize classifier parameters before training')
+    args = parser.parse_args()
+    
+    if args.re_init:
+        print("🔄 Classifier reinitialization enabled via --re_init flag")
+    
     # --- Configuration Loading ---
     config_file = 'tuning_classifier_config.yaml'  # Use the correct config file
     config = load_config(config_file)
@@ -646,6 +720,10 @@ def main():
                 print("\n🔒 Freezing all model parameters for classifier-only training...")
                 for param in model.parameters():
                     param.requires_grad = False
+
+                # Reinitialize classifier if requested
+                if args.re_init:
+                    reinitialize_classifier(model, model_name)
 
                 # Get and unfreeze classifier module
                 classifier_module = None
