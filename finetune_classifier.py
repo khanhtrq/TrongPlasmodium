@@ -206,42 +206,41 @@ def load_datasets(datasets_config_list, data_dir, transform_train, transform_eva
 
             elif dataset_type == 'imagefolder':
                 imgf_root = d_cfg.get('imagefolder_root')
-                if not imgf_root:
-                    raise ValueError("'imagefolder_root' is required for ImageFolder dataset type.")
+                if not imgf_root: raise ValueError(f"Source {i+1}: 'imagefolder_root' is required for type 'imagefolder'.")
                 
-                imgf_train_subdir = d_cfg.get('imagefolder_train_subdir')
-                imgf_val_subdir = d_cfg.get('imagefolder_val_subdir')
-                imgf_test_subdir = d_cfg.get('imagefolder_test_subdir')
+                imgf_train_subdir = d_cfg.get('imagefolder_train_subdir') # Get value, could be None
+                imgf_val_subdir = d_cfg.get('imagefolder_val_subdir')   # Get value, could be None
+                imgf_test_subdir = d_cfg.get('imagefolder_test_subdir')  # Get value, could be None
 
-                if imgf_train_subdir:
-                    train_path = os.path.join(imgf_root, imgf_train_subdir)
-                    print(f"      Train folder: {train_path}")
-                    current_train_dataset = ImageFolderWrapper(
-                        datasets.ImageFolder(root=train_path, transform=transform_train),
-                        class_remapping=class_remapping_config if class_remapping_config.get('enabled', False) else None
-                    )
+                if imgf_train_subdir: # Only proceed if subdir is not None
+                    train_dir = os.path.join(imgf_root, imgf_train_subdir)
+                    if os.path.isdir(train_dir):
+                        current_train_dataset = ImageFolderWrapper(root=train_dir, transform=transform_train, class_remapping=class_remapping_config)
+                        print(f"     Loaded ImageFolder train from: {train_dir}")
+                    else:
+                        warnings.warn(f"     ImageFolder train directory not found: {train_dir} (from source {i+1})")
                 else:
-                    current_train_dataset = ImageFolderWrapper(
-                        datasets.ImageFolder(root=imgf_root, transform=transform_train),
-                        class_remapping=class_remapping_config if class_remapping_config.get('enabled', False) else None
-                    )
+                    print(f"     Skipping ImageFolder train for source {i+1} as subdir is null.")
 
-                if imgf_val_subdir:
-                    val_path = os.path.join(imgf_root, imgf_val_subdir)
-                    print(f"      Validation folder: {val_path}")
-                    current_val_dataset = ImageFolderWrapper(
-                        datasets.ImageFolder(root=val_path, transform=transform_eval),
-                        class_remapping=class_remapping_config if class_remapping_config.get('enabled', False) else None
-                    )
+                if imgf_val_subdir: # Only proceed if subdir is not None
+                    val_dir = os.path.join(imgf_root, imgf_val_subdir)
+                    if os.path.isdir(val_dir):
+                        current_val_dataset = ImageFolderWrapper(root=val_dir, transform=transform_eval, class_remapping=class_remapping_config)
+                        print(f"     Loaded ImageFolder val from: {val_dir}")
+                    else:
+                        warnings.warn(f"     ImageFolder val directory not found: {val_dir} (from source {i+1})")
+                else:
+                    print(f"     Skipping ImageFolder val for source {i+1} as subdir is null.")
 
-                if imgf_test_subdir:
-                    test_path = os.path.join(imgf_root, imgf_test_subdir)
-                    print(f"      Test folder: {test_path}")
-                    current_test_dataset = ImageFolderWrapper(
-                        datasets.ImageFolder(root=test_path, transform=transform_eval),
-                        class_remapping=class_remapping_config if class_remapping_config.get('enabled', False) else None
-                    )
-
+                if imgf_test_subdir: # Only proceed if subdir is not None
+                    test_dir = os.path.join(imgf_root, imgf_test_subdir)
+                    if os.path.isdir(test_dir):
+                        current_test_dataset = ImageFolderWrapper(root=test_dir, transform=transform_eval, class_remapping=class_remapping_config)
+                        print(f"     Loaded ImageFolder test from: {test_dir}")
+                    else:
+                        warnings.warn(f"     ImageFolder test directory not found: {test_dir} (from source {i+1})")
+                else:
+                    print(f"     Skipping ImageFolder test for source {i+1} as subdir is null.")
             else:
                 raise ValueError(f"Unsupported dataset type: {dataset_type}")
 
