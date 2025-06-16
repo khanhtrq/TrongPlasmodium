@@ -175,7 +175,7 @@ classifier_only_training:
 
   # Optional: Define specific criteria for classifier training
   # If not defined, it might reuse criteria from the main training (depending on main.py logic)
-  criterion_a: CrossEntropyLoss # Example criterion for classifier training
+  criterion_a: bmcloss # Example criterion for classifier training
   criterion_a_params:
     # use_class_weights: false # Or true, with weights calculated for this phase if needed
     gamma: 2.0
@@ -188,13 +188,13 @@ classifier_only_training:
   # Regularization for classifier training (inherits from main config if not specified)
   regularization:
     max_norm:
-      enabled: false              # Enable/disable max-norm regularization for classifier training
+      enabled: true              # Enable/disable max-norm regularization for classifier training
       thresh: 0.1                 # Threshold parameter for max-norm constraint
       lp_norm: 2                  # Lp norm to use (typically 2)
       tau: 1                      # Tau parameter for norm calculation
     
     tau_normalization:
-      enabled: true              # Enable/disable tau-normalization for classifier training
+      enabled: false              # Enable/disable tau-normalization for classifier training
       lp_norm: 2                  # Lp norm to use (typically 2)
       tau: 2                      # Tau parameter for normalization
       apply_frequency: 1          # Apply every N epochs (1 = every epoch)

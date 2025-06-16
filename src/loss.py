@@ -327,7 +327,7 @@ def bmc_loss_md(pred, target, noise_var):
     return loss
 
 class BMCLoss(_Loss):
-    def __init__(self, init_noise_sigma=8.):
+    def __init__(self, init_noise_sigma=1.):
         super(BMCLoss, self).__init__()
         self.noise_sigma = torch.nn.Parameter(torch.tensor(init_noise_sigma))
 
