@@ -378,7 +378,7 @@ def get_criterion(criterion, num_classes, device, criterion_params=None):
         ).to(device)
     elif criterion == 'bmcloss':
         return BMCLoss(
-            init_noise_sigma=float(criterion_params.get('init_noise_sigma', 8.))
+            init_noise_sigma=float(criterion_params.get('init_noise_sigma', 1.))
         ).to(device)
     elif criterion == 'ldamloss':
         return LDAMLoss(
