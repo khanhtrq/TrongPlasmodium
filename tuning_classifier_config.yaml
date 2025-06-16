@@ -1,14 +1,18 @@
 # --- Dataset Configuration ---
-data_dir: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification' # Base dir for relative paths if needed
-
+# data_dir: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification' # Base dir for relative paths if needed
+data_dir: '/kaggle/input/bbbc041/dataset_resplit' # Base dir for relative paths if needed
 # --- Datasets Configuration (List) ---
 datasets:
-  - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
-    annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
-    annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
-    annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
-    annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
-
+  # - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
+  #   annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
+  #   annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
+  #   annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
+  #   annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
+  - type: 'imagefolder' # Optional: Example ImageFolder definition
+    imagefolder_root: '/kaggle/input/bbbc041/dataset_resplit'
+    imagefolder_train_subdir: 'train'
+    imagefolder_val_subdir: 'val'
+    imagefolder_test_subdir: 'test'
 
 batch_size: 32
 num_workers: 8 # Set to 0 to avoid multiprocessing issues on Windows
@@ -175,7 +179,7 @@ classifier_only_training:
 
   # Optional: Define specific criteria for classifier training
   # If not defined, it might reuse criteria from the main training (depending on main.py logic)
-  criterion_a: bmcloss # Example criterion for classifier training
+  criterion_a: cbloss # Example criterion for classifier training
   criterion_a_params:
     # use_class_weights: false # Or true, with weights calculated for this phase if needed
     gamma: 2.0
@@ -188,7 +192,7 @@ classifier_only_training:
   # Regularization for classifier training (inherits from main config if not specified)
   regularization:
     max_norm:
-      enabled: false              # Enable/disable max-norm regularization for classifier training
+      enabled: true              # Enable/disable max-norm regularization for classifier training
       thresh: 0.1                 # Threshold parameter for max-norm constraint
       lp_norm: 2                  # Lp norm to use (typically 2)
       tau: 1                      # Tau parameter for norm calculation
@@ -213,6 +217,6 @@ device:
 pretrained_model:
   enabled: true                    # Set to true to load from checkpoint
   model_name: 'efficientnet_b1.ra4_e3600_r240_in1k'  # Model architecture name (must match one in model_names)
-  model_path: 'model/efficientnet_b1.ra4_e3600_r240_in1k_best.pth'
+  model_path: 'model/efficientnet_bbbc041.pth'
   # Note: If enabled=true, only the specified model_name will be trained
 
