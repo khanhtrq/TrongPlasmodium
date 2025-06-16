@@ -23,17 +23,24 @@ seed: 42 # Random seed for reproducible results
 # # --- Class Configuration ---
 
 class_names:
-  - "rbc_parasitized_F_TJ"
-  - "rbc_parasitized_F_TA"
-  - "rbc_parasitized_F_S1_or_S2"
-  - "rbc_parasitized_F_G1_or_G2"
-  - "rbc_unparasitized"
-  - "rbc_unparasitized_artefact_dead_kernel"
+  # - "rbc_parasitized_F_TJ"
+  # - "rbc_parasitized_F_TA"
+  # - "rbc_parasitized_F_S1_or_S2"
+  # - "rbc_parasitized_F_G1_or_G2"
+  # - "rbc_unparasitized"
+  # - "rbc_unparasitized_artefact_dead_kernel"
   # - "rbc_difficult" # New class for difficult-to-classify images
+  - 'difficult'
+  - 'gametocyte'
+  - 'leukocyte'
+  - 'red blood cell'
+  - 'ring'
+  - 'schizont'
+  - 'trophozoite'
 
 # --- Class Remapping Configuration (NEW) ---
 class_remapping:
-  enabled: true                    # Set to true to enable class remapping
+  enabled: false                    # Set to true to enable class remapping
   mapping:                         # Dictionary mapping: original_class_index -> new_class_index
     5: 4                          # Map class 5 to class 4 (merge artefact into unparasitized)
 
@@ -58,6 +65,7 @@ model_names:
   - efficientnet_b1.ra4_e3600_r240_in1k
   # - mobilenetv3_small_050
   # - mobilenetv3_large_150d.ra4_e3600_r256_in1k
+
 # --- Data Augmentation Configuration ---
 augmentation:
   enabled: true                      # Enable/disable augmentation
