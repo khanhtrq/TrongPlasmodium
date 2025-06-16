@@ -394,7 +394,7 @@ def get_criterion(criterion, num_classes, device, criterion_params=None):
         return ClassBalancedLoss(
             samples_per_cls=samples_per_cls,
             num_classes=num_classes,
-            loss_type=criterion_params.get('loss_type', 'focal'),
+            loss_type=criterion_params.get('loss_type', 'softmax'),
             beta=float(criterion_params.get('beta', 0.9999)),
             gamma=float(criterion_params.get('gamma', 2.0))
         ).to(device)
