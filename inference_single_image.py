@@ -605,7 +605,13 @@ def main():
                 rgb_img = tensor_to_rgb_image(image_tensor)
                 
                 # Create output filename
-                image_name = os.path.splitext(os.path.basename(args.image_path))[0]
+                # Extract image name after '/test/' if present, else use basename
+                image_path_lower = args.image_path.replace("\\", "/").lower()
+                if "/test/" in image_path_lower:
+                    image_name = args.image_path.replace("\\", "/").split("/test/", 1)[-1]
+                    image_name = os.path.splitext(image_name)[0].replace("/", "_")
+                else:
+                    image_name = os.path.splitext(os.path.basename(args.image_path))[0]
                 output_filename = f"{image_name}_{args.checkpoint.split('/')[-1].replace('.pth', '')}_gradcam.png"
                 output_path = os.path.join(args.output_dir, output_filename)
                 
