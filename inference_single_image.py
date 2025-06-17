@@ -606,7 +606,7 @@ def main():
                 
                 # Create output filename
                 image_name = os.path.splitext(os.path.basename(args.image_path))[0]
-                output_filename = f"{image_name}_{args.model_name}_gradcam.png"
+                output_filename = f"{image_name}_{args.checkpoint.split('/')[-1].replace('.pth', '')}_gradcam.png"
                 output_path = os.path.join(args.output_dir, output_filename)
                 
                 # Create visualization
