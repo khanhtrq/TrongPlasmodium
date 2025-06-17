@@ -362,7 +362,7 @@ def get_criterion(criterion, num_classes, device, criterion_params=None):
     elif criterion in ['ghmc', 'ghmcclassificationloss']:
         return GHMCClassificationLoss(
             bins=criterion_params.get('bins', 10),
-            momentum=criterion_params.get('momentum', 0.0),
+            momentum=criterion_params.get('momentum', 0.1),
             loss_weight=criterion_params.get('loss_weight', 1.0)
         ).to(device)
     elif criterion == 'ibloss':

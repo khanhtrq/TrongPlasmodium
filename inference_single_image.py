@@ -149,7 +149,7 @@ def compute_gradcam_hooks(model, gradcam_data, input_tensor, target_class=None):
         else:
             print(f"❌ Unexpected gradient dimensions: {gradients.ndim}")
             return None
-        
+        weights = F.relu(weights)  # Apply ReLU to weights
         # Weighted sum of feature maps
         cam = torch.zeros(features.shape[1:], dtype=torch.float32, device=features.device)
         for i, w in enumerate(weights):
@@ -239,6 +239,34 @@ def load_model_from_checkpoint(model_path, model_name, num_classes, device):
     return model, input_size, transform, model_config
 
 
+def extract_normalization_from_transform(transform):
+    """Extract normalization parameters from transform pipeline"""
+    normalize_mean = None
+    normalize_std = None
+    
+    if hasattr(transform, 'transforms'):
+        # Look through transform pipeline for Normalize
+        for t in transform.transforms:
+            if hasattr(t, 'mean') and hasattr(t, 'std'):
+                normalize_mean = np.array(t.mean)
+                normalize_std = np.array(t.std)
+                print(f"🎯 Found normalization: mean={normalize_mean}, std={normalize_std}")
+                break
+    elif hasattr(transform, 'mean') and hasattr(transform, 'std'):
+        # Direct normalization transform
+        normalize_mean = np.array(transform.mean)
+        normalize_std = np.array(transform.std)
+        print(f"🎯 Found direct normalization: mean={normalize_mean}, std={normalize_std}")
+    
+    if normalize_mean is None or normalize_std is None:
+        # Fallback to ImageNet defaults
+        normalize_mean = np.array([0.5, 0.5, 0.5])
+        normalize_std = np.array([0.5, 0.5, 0.5])
+        print(f"⚠️ No normalization found in transform, using ImageNet defaults")
+    
+    return normalize_mean, normalize_std
+
+
 def load_and_preprocess_image(image_path, transform):
     """Load and preprocess a single image"""
     print(f"📸 Loading image: {image_path}")
@@ -253,6 +281,11 @@ def load_and_preprocess_image(image_path, transform):
         if transform:
             image_tensor = transform(image)
             print(f"🔄 Applied transform, tensor shape: {image_tensor.shape}")
+            
+            # Extract and store normalization parameters for later use
+            normalize_mean, normalize_std = extract_normalization_from_transform(transform)
+            
+            return image, image_tensor, normalize_mean, normalize_std
         else:
             # Basic transform if none provided
             from torchvision import transforms
@@ -263,16 +296,16 @@ def load_and_preprocess_image(image_path, transform):
             ])
             image_tensor = basic_transform(image)
             print(f"🔄 Applied basic transform, tensor shape: {image_tensor.shape}")
-        
-        return image, image_tensor
+            
+            return image, image_tensor, np.array([0.485, 0.456, 0.406]), np.array([0.229, 0.224, 0.225])
         
     except Exception as e:
         print(f"❌ Error loading image: {e}")
         raise e
 
 
-def tensor_to_rgb_image(tensor, norm_mean=None, norm_std=None):
-    """Convert tensor to RGB image for visualization with denormalization"""
+def tensor_to_rgb_image(tensor, transform=None, normalize_mean=None, normalize_std=None):
+    """Convert tensor to RGB image for visualization with proper denormalization"""
     # Move to CPU and convert to numpy
     if tensor.dim() == 4:
         tensor = tensor.squeeze(0)  # Remove batch dimension
@@ -283,65 +316,72 @@ def tensor_to_rgb_image(tensor, norm_mean=None, norm_std=None):
     if image.shape[0] == 3:  # If channels first
         image = np.transpose(image, (1, 2, 0))
     
-    # Apply denormalization if mean and std are provided
-    if norm_mean is not None and norm_std is not None:
-        mean = np.array(norm_mean)
-        std = np.array(norm_std)
-        image = image * std + mean  # Denormalize: (tensor * std) + mean
-        print(f"📊 Applied denormalization with mean={mean.tolist()}, std={std.tolist()}")
-    else:
-        print("⚠️ No normalization mean/std provided. Assuming image tensor is already in [0,1] range or does not require specific denormalization.")
+    # Extract normalization from transform if provided
+    if transform is not None and normalize_mean is None and normalize_std is None:
+        normalize_mean, normalize_std = extract_normalization_from_transform(transform)
+    elif normalize_mean is None or normalize_std is None:
+        # Fallback values
+        normalize_mean = np.array([0.5, 0.5, 0.5])
+        normalize_std = np.array([0.5, 0.5, 0.5])
+        print(f"📊 Using fallback ImageNet normalization")
     
-    # Clip to [0, 1] range to ensure valid pixel values
+    print(f"📊 Denormalizing with mean={normalize_mean}, std={normalize_std}")
+    
+    # Apply denormalization: x = (x_norm * std) + mean
+    image = image * normalize_std + normalize_mean
+    
+    # Clip to [0, 1] range for proper display
     image = np.clip(image, 0, 1)
     
-    print(f"📐 Final image shape: {image.shape}, range: [{image.min():.3f}, {image.max():.3f}]")
+    print(f"📐 Denormalized image shape: {image.shape}, range: [{image.min():.3f}, {image.max():.3f}]")
     
     return image
 
 
-def create_gradcam_visualization(rgb_img, cam, class_names, predicted_class, confidence, save_path=None, true_label=None):
-    """Create GradCAM visualization with proper denormalization for overlay"""
+def create_gradcam_visualization(rgb_img, cam, class_names, predicted_class, confidence, save_path=None, 
+                               transform=None, normalize_mean=None, normalize_std=None):
+    """Create GradCAM visualization with proper denormalization from transform"""
     try:
-        # Create a copy to avoid modifying the original
-        # rgb_img is assumed to be correctly denormalized and in [0, 1] range
-        # by the tensor_to_rgb_image function.
-        rgb_display = rgb_img.copy()
+        # Ensure RGB image is properly denormalized using actual transform values
+        if isinstance(rgb_img, torch.Tensor):
+            rgb_img = tensor_to_rgb_image(rgb_img, transform, normalize_mean, normalize_std)
         
-        print(f"📊 Input RGB for visualization range: [{rgb_display.min():.3f}, {rgb_display.max():.3f}]")
+        # Ensure RGB image is in proper range [0, 1]
+        if rgb_img.max() > 1.0:
+            rgb_img = rgb_img / 255.0
+        rgb_img = np.clip(rgb_img, 0, 1)
         
         # Ensure cam is in proper range [0, 1]
         cam = np.clip(cam, 0, 1)
-        print(f"📊 CAM range: [{cam.min():.3f}, {cam.max():.3f}]")
     
         # Apply slight gaussian smoothing to CAM for better visualization
         try:
             from scipy.ndimage import gaussian_filter
             cam_smooth = gaussian_filter(cam, sigma=1.0)
-            print("✨ Applied gaussian smoothing to CAM")
         except ImportError:
             print("⚠️ scipy not available, using original CAM without smoothing")
             cam_smooth = cam
         
         # Create the CAM visualization using opencv
-        from pytorch_grad_cam.utils.image import show_cam_on_image
-        
-        # Ensure rgb_display is float32 in [0,1] range for show_cam_on_image
-        rgb_display = rgb_display.astype(np.float32)
-        cam_smooth = cam_smooth.astype(np.float32)
-        
-        print(f"📊 Pre-overlay RGB shape: {rgb_display.shape}, range: [{rgb_display.min():.3f}, {rgb_display.max():.3f}]")
-        print(f"📊 Pre-overlay CAM shape: {cam_smooth.shape}, range: [{cam_smooth.min():.3f}, {cam_smooth.max():.3f}]")
-        
-        visualization = show_cam_on_image(rgb_display, cam_smooth, use_rgb=True, colormap=cv2.COLORMAP_JET)
-        print("✅ Successfully created overlay visualization")
+        try:
+            from pytorch_grad_cam.utils.image import show_cam_on_image
+            visualization = show_cam_on_image(rgb_img, cam_smooth, use_rgb=True, colormap=cv2.COLORMAP_JET)
+        except ImportError:
+            # Fallback implementation if pytorch_grad_cam not available
+            print("⚠️ pytorch_grad_cam not available, using manual overlay")
+            # Convert CAM to RGB heatmap
+            cam_colored = cv2.applyColorMap(np.uint8(255 * cam_smooth), cv2.COLORMAP_JET)
+            cam_colored = cv2.cvtColor(cam_colored, cv2.COLOR_BGR2RGB) / 255.0
+            # Blend with original image
+            visualization = 0.6 * rgb_img + 0.4 * cam_colored
+            visualization = np.clip(visualization, 0, 1)
         
         # Create figure with larger size for better visibility
         fig, axes = plt.subplots(1, 3, figsize=(18, 6))
         
-        # Original image - show denormalized version
-        axes[0].imshow(rgb_display)
-        axes[0].set_title("Original Image (Denormalized)", fontsize=12, fontweight='bold')
+        # Original image
+        axes[0].imshow(rgb_img)
+        axes[0].set_title("Original Image", fontsize=12, fontweight='bold')
         axes[0].axis('off')
         
         # Heatmap
@@ -353,44 +393,90 @@ def create_gradcam_visualization(rgb_img, cam, class_names, predicted_class, con
         cbar = plt.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
         cbar.set_label('Activation Intensity', rotation=270, labelpad=15)
         
-        # Overlay - this now uses properly denormalized image
+        # Overlay
         axes[2].imshow(visualization)
-        axes[2].set_title("GradCAM Overlay (Denormalized)", fontsize=12, fontweight='bold')
+        axes[2].set_title("GradCAM Overlay", fontsize=12, fontweight='bold')
         axes[2].axis('off')
         
-        # Create title with prediction info
-        if predicted_class < len(class_names):
-            class_name = class_names[predicted_class]
-        else:
-            class_name = f"Class_{predicted_class}"
-
-        # Thêm true label vào tiêu đề nếu có
-        if true_label is not None:
-            if isinstance(true_label, int) and true_label < len(class_names):
-                true_label_name = class_names[true_label]
-            else:
-                true_label_name = str(true_label)
-            title = f"True: {true_label_name} | Pred: {class_name} (Conf: {confidence:.3f})"
-        else:
-            title = f"Prediction: {class_name} (Confidence: {confidence:.3f})"
-        plt.suptitle(title, fontsize=14, fontweight='bold')
+        # Add prediction info to the title
+        class_name = class_names[predicted_class] if class_names and predicted_class < len(class_names) else f"Class {predicted_class}"
+        axes[2].set_title(f"GradCAM Overlay\nPredicted: {class_name} ({confidence:.2%})", 
+                         fontsize=12, fontweight='bold')
+        axes[2].axis('off')
+        
+        # Add overall title
+        fig.suptitle(f"GradCAM Analysis - {class_name}", fontsize=16, fontweight='bold')
+        
+        # Adjust layout
         plt.tight_layout()
         
+        # Save if path provided
         if save_path:
-            plt.savefig(save_path, dpi=200, bbox_inches='tight', facecolor='white')
-            print(f"💾 Saved visualization: {save_path}")
-        else:
-            plt.show()
-            
-        plt.close()
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"💾 Visualization saved to: {save_path}")
+        
+        plt.show()
+        
+        return fig, visualization
             
     except Exception as e:
         print(f"❌ Error creating visualization: {e}")
         traceback.print_exc()
+        return None, None
+
+
+# Update the main inference function to pass normalization parameters
+def run_inference_with_gradcam(model_path, image_path, model_name, num_classes, class_names=None, save_path=None):
+    """Run inference with GradCAM visualization"""
+    try:
+        # Setup device
+        device = get_device()
+        
+        # Load model
+        model, input_size, transform, model_config = load_model_from_checkpoint(
+            model_path, model_name, num_classes, device
+        )
+        
+        # Load and preprocess image - now returns normalization parameters
+        original_image, image_tensor, normalize_mean, normalize_std = load_and_preprocess_image(image_path, transform)
+        
+        # Setup GradCAM
+        gradcam_data = setup_gradcam_hooks(model)
+        
+        try:
+            # Run inference and GradCAM
+            image_tensor = image_tensor.to(device)
+            cam = compute_gradcam_hooks(model, gradcam_data, image_tensor)
+            
+            if cam is not None:
+                # Get prediction
+                with torch.no_grad():
+                    output = model(image_tensor.unsqueeze(0))
+                    probabilities = F.softmax(output, dim=1)
+                    predicted_class = output.argmax(dim=1).item()
+                    confidence = probabilities[0, predicted_class].item()
+                
+                # Create visualization with actual normalization parameters
+                fig, visualization = create_gradcam_visualization(
+                    image_tensor, cam, class_names, predicted_class, confidence, 
+                    save_path, transform, normalize_mean, normalize_std
+                )
+                
+                return fig, visualization, predicted_class, confidence
+            else:
+                print("❌ Failed to generate GradCAM")
+                return None, None, None, None
+                
+        finally:
+            cleanup_gradcam_hooks(gradcam_data)
+            
+    except Exception as e:
+        print(f"❌ Error in inference: {e}")
+        traceback.print_exc()
+        return None, None, None, None
 
 
 def main():
-    true_label = 1
     parser = argparse.ArgumentParser(description='Single Image Inference with GradCAM')
     parser.add_argument('--model_name', type=str, required=True,
                         help='Timm model name (e.g., mobilenetv4_hybrid_medium.ix_e550_r384_in1k)')
@@ -404,8 +490,6 @@ def main():
                         help='Output directory for results (default: ./gradcam_output)')
     parser.add_argument('--device', type=str, default='auto',
                         help='Device to use: auto, cuda, cpu (default: auto)')
-    parser.add_argument('--true_label', type=int, default=None,
-                        help='True label index of the input image (optional)')
     
     args = parser.parse_args()
     
@@ -474,7 +558,7 @@ def main():
         )
         
         # Load and preprocess image
-        original_image, image_tensor = load_and_preprocess_image(args.image_path, transform)
+        original_image, image_tensor, normalize_mean, normalize_std = load_and_preprocess_image(args.image_path, transform)
         
         # Move to device
         input_tensor = image_tensor.unsqueeze(0).to(device)
@@ -518,11 +602,7 @@ def main():
             
             if cam is not None:
                 # Convert tensor to RGB for visualization
-                rgb_img = tensor_to_rgb_image(
-                    image_tensor,
-                    norm_mean=[0.5, 0.5, 0.5],
-                    norm_std=[0.5, 0.5, 0.5]
-                )
+                rgb_img = tensor_to_rgb_image(image_tensor)
                 
                 # Create output filename
                 image_name = os.path.splitext(os.path.basename(args.image_path))[0]
@@ -531,7 +611,7 @@ def main():
                 
                 # Create visualization
                 create_gradcam_visualization(
-                    rgb_img, cam, class_names, predicted_class, confidence, output_path, true_label=true_label
+                    rgb_img, cam, class_names, predicted_class, confidence, output_path, transform, normalize_mean, normalize_std
                 )
                 
                 print(f"✅ GradCAM visualization saved: {output_path}")
@@ -548,9 +628,6 @@ def main():
     except Exception as e:
         print(f"❌ Error during inference: {e}")
         traceback.print_exc()
-
-
-
 
 
 if __name__ == "__main__":
