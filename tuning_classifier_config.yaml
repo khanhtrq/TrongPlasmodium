@@ -1,18 +1,14 @@
 # --- Dataset Configuration ---
-# data_dir: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification' # Base dir for relative paths if needed
-data_dir: '/kaggle/input/bbbc041/dataset_resplit' # Base dir for relative paths if needed
+data_dir: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification' # Base dir for relative paths if needed
+
 # --- Datasets Configuration (List) ---
 datasets:
-  # - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
-  #   annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
-  #   annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
-  #   annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
-  #   annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
-  - type: 'imagefolder' # Optional: Example ImageFolder definition
-    imagefolder_root: '/kaggle/input/bbbc041/dataset_resplit'
-    imagefolder_train_subdir: 'train'
-    imagefolder_val_subdir: 'val'
-    imagefolder_test_subdir: 'test'
+  - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
+    annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
+    annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
+    annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
+    annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
+
 
 batch_size: 32
 num_workers: 8 # Set to 0 to avoid multiprocessing issues on Windows
@@ -23,24 +19,17 @@ seed: 42 # Random seed for reproducible results
 # # --- Class Configuration ---
 
 class_names:
-  # - "rbc_parasitized_F_TJ"
-  # - "rbc_parasitized_F_TA"
-  # - "rbc_parasitized_F_S1_or_S2"
-  # - "rbc_parasitized_F_G1_or_G2"
-  # - "rbc_unparasitized"
-  # - "rbc_unparasitized_artefact_dead_kernel"
+  - "rbc_parasitized_F_TJ"
+  - "rbc_parasitized_F_TA"
+  - "rbc_parasitized_F_S1_or_S2"
+  - "rbc_parasitized_F_G1_or_G2"
+  - "rbc_unparasitized"
+  - "rbc_unparasitized_artefact_dead_kernel"
   # - "rbc_difficult" # New class for difficult-to-classify images
-  - 'difficult'
-  - 'gametocyte'
-  - 'leukocyte'
-  - 'red blood cell'
-  - 'ring'
-  - 'schizont'
-  - 'trophozoite'
 
 # --- Class Remapping Configuration (NEW) ---
 class_remapping:
-  enabled: false                    # Set to true to enable class remapping
+  enabled: true                    # Set to true to enable class remapping
   mapping:                         # Dictionary mapping: original_class_index -> new_class_index
     5: 4                          # Map class 5 to class 4 (merge artefact into unparasitized)
 
@@ -65,7 +54,6 @@ model_names:
   - efficientnet_b1.ra4_e3600_r240_in1k
   # - mobilenetv3_small_050
   # - mobilenetv3_large_150d.ra4_e3600_r256_in1k
-
 # --- Data Augmentation Configuration ---
 augmentation:
   enabled: true                      # Enable/disable augmentation
@@ -156,7 +144,7 @@ weighted_random_sampler:
 classifier_only_training:
   enabled: true               # Set to true to run this phase, false to skip
   num_epochs: 100              # Number of epochs for classifier fine-tuning
-  patience: 5                # Early stopping patience for classifier fine-tuning
+  patience: 20                # Early stopping patience for classifier fine-tuning
   use_amp: False             # Can be different from main training, if desired
   clip_grad_norm: 0       # Max norm for gradient clipping for this phase
   train_ratio: 1.0          # Ratio of training set for this phase (usually 1.0)
@@ -164,7 +152,7 @@ classifier_only_training:
   
   # WeightedRandomSampler for classifier training (inherits from main config if not specified)
   weighted_random_sampler:
-    enabled: false                    # Enable/disable for classifier training specifically
+    enabled: true                    # Enable/disable for classifier training specifically
     replacement: true                 # Whether to sample with replacement
     weight_calculation: 'inverse'     # Options: 'inverse', 'balanced', 'custom'
     apply_sqrt: false                 # Apply square root to computed weights
@@ -225,6 +213,6 @@ device:
 pretrained_model:
   enabled: true                    # Set to true to load from checkpoint
   model_name: 'efficientnet_b1.ra4_e3600_r240_in1k'  # Model architecture name (must match one in model_names)
-  model_path: 'model/efficientnet_bbbc041.pth'
+  model_path: 'model\efficientnet_b1.ra4_e3600_r240_in1k_best.pth'
   # Note: If enabled=true, only the specified model_name will be trained
 
