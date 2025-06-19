@@ -10,7 +10,7 @@ import warnings
 from PIL import Image
 import cv2
 import traceback  # Thêm import traceback
-
+import torchvision.transforms as transforms
 # pytorch-grad-cam imports
 from pytorch_grad_cam import GradCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -1007,11 +1007,21 @@ def main():
         model1_checkpoint, model1_name, num_classes, device
     )
     
+    transform1 = transforms.Compose([
+    transforms.Resize(input_size1),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=getattr(model_config1, 'mean', [0.5, 0.5, 0.5]), std=getattr(model_config1, 'std', [0.5, 0.5, 0.5]))
+    ])
+    
     # Update dataset transform
     if transform1:
         test_dataset.transform = transform1
         print(f"   🔄 Applied model-specific transform to dataset")
     
+
+
+    
+
     # Create dataloader with Windows-compatible settings
     print(f"   🔧 Creating DataLoader (Windows-optimized: num_workers=0)...")
     try:
