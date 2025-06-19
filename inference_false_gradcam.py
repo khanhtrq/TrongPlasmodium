@@ -181,6 +181,7 @@ def compute_gradcam_hooks(model, gradcam_data, input_tensor, target_class=None):
         print(f"         🎯 Weights shape: {weights.shape}, range: [{weights.min().item():.6f}, {weights.max().item():.6f}]")
         
         # Weighted sum of feature maps
+        # weights = F.relu(weights)  # Apply ReLU to weights
         cam = torch.zeros(features.shape[1:], dtype=torch.float32, device=features.device)
         for i, w in enumerate(weights):
             if i < features.shape[0]:
@@ -256,20 +257,20 @@ def tensor_to_rgb_image(tensor, model_config=None):
     
     # Get normalization parameters from model_config if available
     if model_config and hasattr(model_config, 'normalization'):
-        mean = np.array(model_config.normalization.get('mean', [0.485, 0.456, 0.406]))
-        std = np.array(model_config.normalization.get('std', [0.229, 0.224, 0.225]))
+        mean = np.array(model_config.normalization.get('mean', [0.5, 0.5, 0.5]))
+        std = np.array(model_config.normalization.get('std', [0.5, 0.5, 0.5]))
     else:
         # Default ImageNet normalization - but check if image is already normalized
         # If the image values are roughly in [-2, 2] range, it's likely normalized
         if image.min() < -1.0 or image.max() > 1.5:
             # Image appears to be normalized, apply denormalization
-            mean = np.array([0.485, 0.456, 0.406])
-            std = np.array([0.229, 0.224, 0.225])
+            mean = np.array([0.5, 0.5, 0.5])
+            std = np.array([0.5, 0.5, 0.5])
             print(f"         📊 Applying ImageNet denormalization (mean={mean}, std={std})")
         else:
             # Image appears to already be in [0,1] range
-            mean = np.array([0.0, 0.0, 0.0])
-            std = np.array([1.0, 1.0, 1.0])
+            mean = np.array([0.5, 0.5, 0.5])
+            std = np.array([0.5, 0.5, 0.5])
             print(f"         📊 Image appears unnormalized, skipping denormalization")
     
     # Apply denormalization
@@ -868,6 +869,67 @@ def create_summary_report_incorrect_only(incorrect_samples, class_names, save_di
     print(f"📄 Incorrect predictions analysis saved to: {report_path}")
 
 
+def find_disagreement_samples(preds1, preds2, labels, confs1, confs2):
+    """
+    Find samples where one model is correct and the other is wrong.
+    Returns two lists:
+      - model1_correct_model2_wrong: [(idx, label, pred1, conf1, pred2, conf2)]
+      - model2_correct_model1_wrong: [(idx, label, pred1, conf1, pred2, conf2)]
+    """
+    model1_correct_model2_wrong = []
+    model2_correct_model1_wrong = []
+    for idx, (p1, p2, l, c1, c2) in enumerate(zip(preds1, preds2, labels, confs1, confs2)):
+        if p1 == l and p2 != l:
+            model1_correct_model2_wrong.append((idx, l, p1, c1, p2, c2))
+        elif p2 == l and p1 != l:
+            model2_correct_model1_wrong.append((idx, l, p1, c1, p2, c2))
+    return model1_correct_model2_wrong, model2_correct_model1_wrong
+
+
+def generate_gradcam_disagreement(
+    model1, model2, dataset, disagreement_samples, 
+    class_names, model_config1, model_config2, device, save_dir, 
+    model1_name="model1", model2_name="model2"
+):
+    """
+    For each disagreement sample, generate GradCAM for both models and save side-by-side.
+    """
+    print(f"\n🔥 Generating GradCAM for disagreement samples ({model1_name} correct, {model2_name} wrong)...")
+    os.makedirs(save_dir, exist_ok=True)
+    gradcam_data1 = setup_gradcam_hooks(model1)
+    gradcam_data2 = setup_gradcam_hooks(model2)
+    try:
+        for i, (idx, label, pred1, conf1, pred2, conf2) in enumerate(disagreement_samples):
+            image, _ = dataset[idx]
+            input_tensor = image.unsqueeze(0).to(device)
+            cam1 = compute_gradcam_hooks(model1, gradcam_data1, input_tensor, target_class=pred1)
+            cam2 = compute_gradcam_hooks(model2, gradcam_data2, input_tensor, target_class=pred2)
+            rgb_img = tensor_to_rgb_image(image, model_config1)
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+            axes[0].imshow(rgb_img)
+            axes[0].set_title(f"Original\nTrue: {class_names[label]}")
+            if cam1 is not None:
+                axes[1].imshow(show_cam_on_image(rgb_img, np.clip(cam1, 0, 1), use_rgb=True, colormap=cv2.COLORMAP_JET))
+                axes[1].set_title(f"{model1_name} (Correct)\nPred: {class_names[pred1]} ({conf1:.2f})")
+            else:
+                axes[1].text(0.5, 0.5, "GradCAM Failed", ha='center', va='center')
+                axes[1].set_title(f"{model1_name} (Correct)")
+            if cam2 is not None:
+                axes[2].imshow(show_cam_on_image(rgb_img, np.clip(cam2, 0, 1), use_rgb=True, colormap=cv2.COLORMAP_JET))
+                axes[2].set_title(f"{model2_name} (Wrong)\nPred: {class_names[pred2]} ({conf2:.2f})")
+            else:
+                axes[2].text(0.5, 0.5, "GradCAM Failed", ha='center', va='center')
+                axes[2].set_title(f"{model2_name} (Wrong)")
+            for ax in axes: ax.axis('off')
+            plt.tight_layout()
+            fname = f"{i+1:03d}_true_{class_names[label]}_{model1_name}_correct_{class_names[pred1]}_{model2_name}_wrong_{class_names[pred2]}.png"
+            plt.savefig(os.path.join(save_dir, fname), dpi=200, bbox_inches='tight')
+            plt.close()
+            print(f"   Saved: {fname}")
+    finally:
+        cleanup_gradcam_hooks(gradcam_data1)
+        cleanup_gradcam_hooks(gradcam_data2)
+
 def main():
     """Main inference and analysis function."""
     # Configuration
@@ -890,12 +952,12 @@ def main():
     results_dir = config['results_dir']
     
     # Model selection (modify these as needed)
-    model_name = "mobilenetv4_hybrid_medium.ix_e550_r384_in1k"  # Change this to your desired model
-    model_checkpoint = r"X:\datn\seed42\5cls mbnv4 aug\PlasmodiumClassification-1\results_kaggle\mobilenetv4_hybrid_medium.ix_e550_r384_in1k\mobilenetv4_hybrid_medium.ix_e550_r384_in1k_best.pth"
+    model1_name = "efficientnet_b1.ra4_e3600_r240_in1k"  # Change this to your desired model
+    model1_checkpoint = r"model/efficientnet_b1_finetune.pth"
     
     # Check if model checkpoint exists
-    if not os.path.exists(model_checkpoint):
-        print(f"❌ Model checkpoint not found: {model_checkpoint}")
+    if not os.path.exists(model1_checkpoint):
+        print(f"❌ Model checkpoint not found: {model1_checkpoint}")
         print("Available models:")
         if os.path.exists(results_dir):
             for item in os.listdir(results_dir):
@@ -941,13 +1003,13 @@ def main():
     print(f"   ✅ Loaded test dataset with {len(test_dataset)} samples")
     
     # Load model (use remapped num_classes)
-    model, input_size, transform, model_config = load_model_from_checkpoint(
-        model_checkpoint, model_name, num_classes, device
+    model1, input_size1, transform1, model_config1 = load_model_from_checkpoint(
+        model1_checkpoint, model1_name, num_classes, device
     )
     
     # Update dataset transform
-    if transform:
-        test_dataset.transform = transform
+    if transform1:
+        test_dataset.transform = transform1
         print(f"   🔄 Applied model-specific transform to dataset")
     
     # Create dataloader with Windows-compatible settings
@@ -970,7 +1032,7 @@ def main():
     # Perform predictions with class remapping
     try:
         predictions, true_labels, confidences = predict_dataset(
-            model, test_loader, device, class_names, class_mapping
+            model1, test_loader, device, class_names, class_mapping
         )
     except Exception as e:
         print(f"❌ Error during prediction: {e}")
@@ -983,17 +1045,17 @@ def main():
     )
     
     # Create output directory in the same location as the model checkpoint
-    model_dir = os.path.dirname(model_checkpoint)  # Get the directory containing the .pth file
+    model_dir = os.path.dirname(model1_checkpoint)  # Get the directory containing the .pth file
     analysis_dir = os.path.join(model_dir, "gradcam_incorrect_only")
     os.makedirs(analysis_dir, exist_ok=True)
     print(f"\n📁 Analysis will be saved alongside model checkpoint:")
-    print(f"   Model: {model_checkpoint}")
+    print(f"   Model: {model1_checkpoint}")
     print(f"   Analysis: {analysis_dir}")
     
     # Generate GradCAM analysis - ONLY for incorrect predictions
     generate_gradcam_analysis_incorrect_only(
-        model, test_dataset, incorrect_samples,
-        class_names, model_config, device, analysis_dir
+        model1, test_dataset, incorrect_samples,
+        class_names, model_config1, device, analysis_dir
     )
     
     # Create summary report for incorrect predictions only
@@ -1003,6 +1065,63 @@ def main():
     print(f"📁 Analysis directory: {analysis_dir}")
     print(f"   - Incorrect predictions GradCAM: {os.path.join(analysis_dir, 'incorrect_predictions_gradcam')}")
     print(f"   - Summary report: {os.path.join(analysis_dir, 'incorrect_predictions_analysis.txt')}")
+    
+    ### New code for dual model analysis ###
+    # Load model 2 (change these as needed)
+    model2_name = "efficientnet_b1.ra4_e3600_r240_in1k"
+    model2_checkpoint = r"model/efficientnet_b1.ra4_e3600_r240_in1k_best.pth"
+    model2, input_size2, transform2, model_config2 = load_model_from_checkpoint(
+        model2_checkpoint, model2_name, num_classes, device
+    )
+
+    # Update dataset transform (use transform1 for both)
+    if transform1:
+        test_dataset.transform = transform1
+
+    # Create dataloader with Windows-compatible settings
+    print(f"   🔧 Creating DataLoader (Windows-optimized: num_workers=0)...")
+    try:
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=16,  # Use smaller batch size for inference
+            shuffle=False,
+            num_workers=0,  # Set to 0 to avoid Windows multiprocessing issues
+            collate_fn=collate_fn_skip_error,
+            pin_memory=False  # Disable pin_memory for CPU compatibility
+        )
+        print(f"   ✅ DataLoader created successfully")
+    except Exception as e:
+        print(f"   ❌ Error creating DataLoader: {e}")
+        print(f"   💡 Tip: Try setting num_workers=0 in your config for Windows compatibility")
+        return
+    
+    # Predict with both models
+    preds1, labels1, confs1 = predict_dataset(model1, test_loader, device, class_names, class_mapping)
+    preds2, labels2, confs2 = predict_dataset(model2, test_loader, device, class_names, class_mapping)
+
+    # Find disagreement samples
+    m1c_m2w, m2c_m1w = find_disagreement_samples(preds1, preds2, labels1, confs1, confs2)
+    print(f"\nSamples where {model1_name} correct, {model2_name} wrong: {len(m1c_m2w)}")
+    print(f"Samples where {model2_name} correct, {model1_name} wrong: {len(m2c_m1w)}")
+
+    # Output directories
+    analysis_dir = os.path.join(os.path.dirname(model1_checkpoint), "gradcam_disagreement")
+    os.makedirs(analysis_dir, exist_ok=True)
+
+    # GradCAM for model1 correct, model2 wrong
+    generate_gradcam_disagreement(
+        model1, model2, test_dataset, m1c_m2w, class_names, model_config1, model_config2, device,
+        os.path.join(analysis_dir, f"{model1_name}_correct_{model2_name}_wrong"),
+        model1_name, model2_name
+    )
+    # GradCAM for model2 correct, model1 wrong
+    generate_gradcam_disagreement(
+        model2, model1, test_dataset, m2c_m1w, class_names, model_config2, model_config1, device,
+        os.path.join(analysis_dir, f"{model2_name}_correct_{model1_name}_wrong"),
+        model2_name, model1_name
+    )
+
+    print(f"\n🎉 Disagreement GradCAM analysis complete! Results in: {analysis_dir}")
 
 
 if __name__ == "__main__":
