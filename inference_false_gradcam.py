@@ -1007,8 +1007,10 @@ def main():
         model1_checkpoint, model1_name, num_classes, device
     )
     
+    print(input_size1)
+    
     transform1 = transforms.Compose([
-    transforms.Resize(input_size1),
+    transforms.Resize((input_size1,input_size1), interpolation=transforms.InterpolationMode.BICUBIC),
     transforms.ToTensor(),
     transforms.Normalize(mean=getattr(model_config1, 'mean', [0.5, 0.5, 0.5]), std=getattr(model_config1, 'std', [0.5, 0.5, 0.5]))
     ])
