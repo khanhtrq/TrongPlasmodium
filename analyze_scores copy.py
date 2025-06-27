@@ -288,7 +288,7 @@ def calculate_classification_metrics_v2(file_path):
 
 if __name__ == "__main__":
     # Thay 'du_lieu_cua_ban.txt' bằng đường dẫn thực tế đến file của bạn
-    file_path = r"X:\datn\finetune\wd maxnorm cbsm wspl\PlasmodiumClassification-1\results_kaggle\efficientnet_b1.ra4_e3600_r240_in1k_classifier_finetune\efficientnet_b1.ra4_e3600_r240_in1k_classifier_test_eval_predictions.txt"
+    file_path = r"X:\datn\PlasmodiumClassification-1\file2_no_duplicates.txt"
     # Nếu bạn muốn chạy với file của mình:
     print(f"\n--- Phân tích file: {file_path} ---")
     calculate_classification_metrics_v2(file_path)

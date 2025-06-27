@@ -1,23 +1,3 @@
-"""
-GradCAM Analysis for Incorrect Predictions
-
-This script performs GradCAM analysis focusing on incorrect predictions to understand 
-model failures. It uses the pytorch-grad-cam library for reliable and efficient 
-GradCAM computation.
-
-Key features:
-- Uses pytorch-grad-cam library instead of manual hook-based implementation
-- Analyzes only incorrect predictions to focus on failure cases
-- Generates comprehensive summary visualizations
-- Supports model comparison and disagreement analysis
-- Windows-compatible with multiprocessing safeguards
-
-Updated: Uses pytorch-grad-cam for more stable and efficient GradCAM computation
-"""
-
-# Configuration for model architecture printing
-PRINT_MODEL_ARCHITECTURE = True  # Set to False to disable detailed architecture printing
-
 import os
 import yaml
 import torch
@@ -32,7 +12,7 @@ import cv2
 import traceback  # Thêm import traceback
 import torchvision.transforms as transforms
 # pytorch-grad-cam imports
-from pytorch_grad_cam import GradCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad, HiResCAM, GradCAMElementWise
+from pytorch_grad_cam import GradCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image
 
@@ -61,26 +41,9 @@ def find_target_layer(model):
     all_modules = list(model.named_modules())
     print(f"   Found {len(all_modules)} total modules")
     
-    # Print detailed model structure for debugging
-    print(f"\n📋 Model Architecture Details:")
-    print(f"   Model type: {type(model).__name__}")
-    
-    # Print main components
-    main_components = []
-    for name, module in model.named_children():
-        main_components.append(f"{name}: {type(module).__name__}")
-        # Count parameters in each component
-        params = sum(p.numel() for p in module.parameters())
-        main_components[-1] += f" ({params:,} params)"
-    
-    if main_components:
-        print(f"   Main components:")
-        for comp in main_components:
-            print(f"     - {comp}")
-    
     # Print last few modules for debugging
     num_layers_to_print = min(len(all_modules), 8)
-    print(f"\n   Last {num_layers_to_print} modules:")
+    print(f"   Last {num_layers_to_print} modules:")
     for i in range(len(all_modules) - num_layers_to_print, len(all_modules)):
         name, module = all_modules[i]
         print(f"     - {name}: {type(module).__name__}")
@@ -121,7 +84,8 @@ def find_target_layer(model):
         target_layer = model.conv_head
         print(f"🎯 Selected 'conv_head': {type(target_layer).__name__}")
     
-    # 5. Fallback: Find last Conv2d layer    if target_layer is None:
+    # 5. Fallback: Find last Conv2d layer
+    if target_layer is None:
         print("   Searching for last Conv2d layer...")
         for name, module in model.named_modules():
             if isinstance(module, torch.nn.Conv2d):
@@ -131,77 +95,135 @@ def find_target_layer(model):
     if target_layer is None:
         raise ValueError("Could not find suitable target layer for GradCAM")
     
-    # Print detailed information about selected target layer
-    print(f"\n🎯 Selected Target Layer Analysis:")
-    print(f"   Layer type: {type(target_layer).__name__}")
-    print(f"   Layer parameters: {sum(p.numel() for p in target_layer.parameters()):,}")
-    
-    # Try to get output shape information if possible
-    try:
-        # Find the parent module name for context
-        for name, module in model.named_modules():
-            if module is target_layer:
-                print(f"   Full layer path: {name}")
-                break
-        
-        # Print layer configuration if available
-        if hasattr(target_layer, 'in_features'):
-            print(f"   Input features: {target_layer.in_features}")
-        if hasattr(target_layer, 'out_features'):
-            print(f"   Output features: {target_layer.out_features}")
-        if hasattr(target_layer, 'in_channels'):
-            print(f"   Input channels: {target_layer.in_channels}")
-        if hasattr(target_layer, 'out_channels'):
-            print(f"   Output channels: {target_layer.out_channels}")
-        if hasattr(target_layer, 'kernel_size'):
-            print(f"   Kernel size: {target_layer.kernel_size}")
-        if hasattr(target_layer, 'normalized_shape'):
-            print(f"   Normalized shape: {target_layer.normalized_shape}")
-            
-    except Exception as e:
-        print(f"   ⚠️ Could not get detailed layer info: {e}")
-    
     return target_layer
 
 
-def setup_pytorch_gradcam(model, target_layer=None):
-    """Setup pytorch-grad-cam GradCAM"""
+def setup_gradcam_hooks(model, target_layer=None):
+    """Setup GradCAM using hook-based approach from gradcam.py"""
     model.eval()  # Critical: ensure eval mode
     
     if target_layer is None:
         target_layer = find_target_layer(model)
     
-    print(f"✅ Setting up pytorch-grad-cam GradCAM on: {target_layer.__class__.__name__}")
+    print(f"✅ Setting up GradCAM hooks on: {target_layer.__class__.__name__}")
     
-    # Create GradCAM object with target layer
-    cam = GradCAM(model=model, target_layers=[target_layer])
+    gradcam_data = {'features': None, 'gradients': None}
     
-    return cam
+    def forward_hook(module, input, output):
+        if isinstance(output, torch.Tensor):
+            gradcam_data['features'] = output
+        elif isinstance(output, (list, tuple)) and len(output) > 0:
+            gradcam_data['features'] = output[0]
+    
+    def backward_hook(module, grad_input, grad_output):
+        if isinstance(grad_output, tuple) and len(grad_output) > 0:
+            gradcam_data['gradients'] = grad_output[0]
+    
+    forward_handle = target_layer.register_forward_hook(forward_hook)
+    backward_handle = target_layer.register_backward_hook(backward_hook)
+    
+    gradcam_data['forward_handle'] = forward_handle
+    gradcam_data['backward_handle'] = backward_handle
+    
+    return gradcam_data
 
 
-def compute_gradcam_pytorch(cam, input_tensor, target_class=None):
-    """Compute GradCAM using pytorch-grad-cam library"""
+def compute_gradcam_hooks(model, gradcam_data, input_tensor, target_class=None):
+    """Compute GradCAM using hook-based approach from gradcam.py"""
     try:
         if input_tensor.dim() == 3:
             input_tensor = input_tensor.unsqueeze(0)
         
         print(f"         🔍 Input shape: {input_tensor.shape}, Target class: {target_class}")
         
-        # Create target for specific class
-        targets = None
-        if target_class is not None:
-            targets = [ClassifierOutputTarget(target_class)]
+        # Ensure gradients are enabled
+        input_tensor.requires_grad_(True)
         
-        # Generate GradCAM
-        grayscale_cam = cam(input_tensor=input_tensor, targets=targets)
+        # Forward pass
+        output = model(input_tensor)
         
-        # Extract first (and only) result from batch
-        grayscale_cam = grayscale_cam[0, :]
+        if target_class is None:
+            target_class = output.argmax(dim=1).item()
         
-        print(f"         📊 GradCAM range: [{grayscale_cam.min():.6f}, {grayscale_cam.max():.6f}]")
-        print(f"         📐 GradCAM shape: {grayscale_cam.shape}")
+        print(f"         📊 Model output shape: {output.shape}, max: {output.max().item():.3f}")
         
-        return grayscale_cam
+        # Backward pass
+        model.zero_grad()
+        one_hot = torch.zeros_like(output)
+        one_hot[0, target_class] = 1.0
+        output.backward(gradient=one_hot, retain_graph=True)
+        
+        # Get captured data
+        gradients = gradcam_data['gradients']
+        features = gradcam_data['features']
+        
+        if gradients is None or features is None:
+            print("         ❌ Failed to capture gradients or features from hooks")
+            return None
+        
+        print(f"         📐 Features shape: {features.shape}, Gradients shape: {gradients.shape}")
+        print(f"         📊 Gradients range: [{gradients.min().item():.6f}, {gradients.max().item():.6f}]")
+        print(f"         📊 Features range: [{features.min().item():.6f}, {features.max().item():.6f}]")
+        
+        # Use first sample in batch
+        gradients = gradients[0]  # (C, H, W)
+        features = features[0]    # (C, H, W)
+        
+        # Global Average Pooling on gradients
+        if gradients.ndim == 3:  # Spatial (C, H, W)
+            weights = torch.mean(gradients, dim=(1, 2))  # (C,)
+        elif gradients.ndim == 2:  # Sequence (C, D)
+            weights = torch.mean(gradients, dim=1)  # (C,)
+        else:
+            print(f"         ❌ Unexpected gradient dimensions: {gradients.ndim}")
+            return None
+        
+        print(f"         🎯 Weights shape: {weights.shape}, range: [{weights.min().item():.6f}, {weights.max().item():.6f}]")
+        
+        # Weighted sum of feature maps
+        weights = F.relu(weights)  # Apply ReLU to weights
+        cam = torch.zeros(features.shape[1:], dtype=torch.float32, device=features.device)
+        for i, w in enumerate(weights):
+            if i < features.shape[0]:
+                cam += w * features[i]
+        
+        print(f"         📊 Raw CAM range: [{cam.min().item():.6f}, {cam.max().item():.6f}]")
+        
+        # Apply ReLU
+        cam = F.relu(cam)
+        
+        print(f"         📊 After ReLU CAM range: [{cam.min().item():.6f}, {cam.max().item():.6f}]")
+        
+        # Check if CAM is all zeros after ReLU
+        if torch.all(cam == 0):
+            print("         ⚠️ WARNING: CAM is all zeros after ReLU! This suggests no positive activations.")
+            return None
+        
+        # Normalize CAM to [0, 1]
+        cam_min = torch.min(cam)
+        cam_max = torch.max(cam)
+        if cam_max > cam_min:
+            cam = (cam - cam_min) / (cam_max - cam_min + 1e-8)
+        else:
+            cam = torch.zeros_like(cam)
+        
+        print(f"         📊 Final normalized CAM range: [{cam.min().item():.6f}, {cam.max().item():.6f}]")
+        
+        # Convert to numpy and resize
+        cam_np = cam.detach().cpu().numpy()
+        
+        if cam_np.ndim == 2:  # Spatial CAM
+            target_size = (input_tensor.shape[2], input_tensor.shape[3])
+            try:
+                cam_resized = cv2.resize(cam_np, (target_size[1], target_size[0]))
+                print(f"         ✅ CAM resized to {cam_resized.shape}")
+                return cam_resized
+            except Exception as e:
+                print(f"         ❌ Error resizing CAM: {e}")
+                return cam_np
+        else:
+            print(f"         ⚠️ CAM is not 2D (shape: {cam_np.shape}), returning as-is")
+            return cam_np
             
     except Exception as e:
         print(f"         ❌ Error in GradCAM computation: {e}")
@@ -209,7 +231,16 @@ def compute_gradcam_pytorch(cam, input_tensor, target_class=None):
         return None
 
 
-# No longer needed - pytorch-grad-cam handles cleanup automatically
+def cleanup_gradcam_hooks(gradcam_data):
+    """Clean up GradCAM hooks"""
+    try:
+        if 'forward_handle' in gradcam_data:
+            gradcam_data['forward_handle'].remove()
+        if 'backward_handle' in gradcam_data:
+            gradcam_data['backward_handle'].remove()
+        print("   🧹 GradCAM hooks cleaned up")
+    except Exception as e:
+        print(f"   ⚠️ Error cleaning up hooks: {e}")
 
 
 def tensor_to_rgb_image(tensor, model_config=None):
@@ -338,12 +369,6 @@ def load_model_from_checkpoint(model_path, model_name, num_classes, device):
         model.to(device)
         model.eval()  # Ensure model is in evaluation mode - CRITICAL!
         print(f"   📍 Model moved to {device} and set to eval mode")
-        
-        # Print comprehensive model architecture analysis (if enabled)
-        if PRINT_MODEL_ARCHITECTURE:
-            print_model_architecture_summary(model, model_name, input_size, num_classes)
-        else:
-            print(f"   ℹ️ Model architecture printing disabled (PRINT_MODEL_ARCHITECTURE=False)")
         
     except Exception as e:
         print(f"   ❌ Error loading checkpoint: {e}")
@@ -525,9 +550,9 @@ def create_comprehensive_incorrect_summary(model, dataset, incorrect_samples,
         print("   ⚠️ No incorrect samples to summarize")
         return
     
-    # Setup GradCAM using pytorch-grad-cam
+    # Setup GradCAM
     try:
-        cam = setup_pytorch_gradcam(model)
+        gradcam_data = setup_gradcam_hooks(model)
     except Exception as e:
         print(f"❌ Failed to setup GradCAM for summary: {e}")
         return
@@ -586,7 +611,7 @@ def create_comprehensive_incorrect_summary(model, dataset, incorrect_samples,
                     
                     # Prepare input and compute GradCAM
                     input_tensor = image.unsqueeze(0).to(device)
-                    grayscale_cam = compute_gradcam_pytorch(cam, input_tensor, target_class=pred_class)
+                    cam = compute_gradcam_hooks(model, gradcam_data, input_tensor, target_class=pred_class)
                     
                     # Convert image to RGB
                     rgb_img = tensor_to_rgb_image(image, model_config)
@@ -602,9 +627,9 @@ def create_comprehensive_incorrect_summary(model, dataset, incorrect_samples,
                                         fontsize=8, fontweight='bold')
                     original_ax.axis('off')
                     
-                    if grayscale_cam is not None:
+                    if cam is not None:
                         # Normalize and smooth CAM
-                        cam_normalized = np.clip(grayscale_cam, 0, 1)
+                        cam_normalized = np.clip(cam, 0, 1)
                         try:
                             from scipy.ndimage import gaussian_filter
                             cam_smooth = gaussian_filter(cam_normalized, sigma=0.8)
@@ -683,16 +708,14 @@ def create_comprehensive_incorrect_summary(model, dataset, incorrect_samples,
         
         print(f"   📄 Detailed summary text saved: {summary_text_path}")
     
-    except Exception as e:
-        print(f"❌ Error creating comprehensive summary: {e}")
-        traceback.print_exc()
-    
-    # Note: pytorch-grad-cam handles cleanup automatically
+    finally:
+        # Clean up hooks
+        cleanup_gradcam_hooks(gradcam_data)
 
 
 def generate_gradcam_analysis_incorrect_only(model, dataset, incorrect_samples, 
                                            class_names, model_config, device, save_dir):
-    """Generate GradCAM visualizations ONLY for incorrect predictions using pytorch-grad-cam."""
+    """Generate GradCAM visualizations ONLY for incorrect predictions using hook-based approach."""
     print(f"\n🔥 Generating GradCAM analysis for INCORRECT predictions only...")
     print(f"   Will generate {len(incorrect_samples)} visualizations")
     
@@ -705,13 +728,13 @@ def generate_gradcam_analysis_incorrect_only(model, dataset, incorrect_samples,
                                          class_names, model_config, device, save_dir)
     
     # Then generate individual visualizations
-    # Setup GradCAM using pytorch-grad-cam
+    # Setup GradCAM using hook-based approach
     try:
-        print(f"   🏗️ Setting up pytorch-grad-cam for individual samples...")
-        cam = setup_pytorch_gradcam(model)
-        print(f"   ✅ pytorch-grad-cam setup successful")
+        print(f"   🏗️ Setting up hook-based GradCAM for individual samples...")
+        gradcam_data = setup_gradcam_hooks(model)
+        print(f"   ✅ Hook-based GradCAM setup successful")
     except Exception as e:
-        print(f"❌ Failed to setup pytorch-grad-cam: {e}")
+        print(f"❌ Failed to setup hook-based GradCAM: {e}")
         traceback.print_exc()
         return
     
@@ -750,8 +773,8 @@ def generate_gradcam_analysis_incorrect_only(model, dataset, incorrect_samples,
                     # Prepare input
                     input_tensor = image.unsqueeze(0).to(device)
                     
-                    # Generate GradCAM using pytorch-grad-cam
-                    grayscale_cam = compute_gradcam_pytorch(cam, input_tensor, target_class=pred_class)
+                    # Generate GradCAM using hook-based approach
+                    grayscale_cam = compute_gradcam_hooks(model, gradcam_data, input_tensor, target_class=pred_class)
                     
                     if grayscale_cam is not None:
                         # Convert tensor to RGB image
@@ -783,14 +806,13 @@ def generate_gradcam_analysis_incorrect_only(model, dataset, incorrect_samples,
                     traceback.print_exc()
                     continue
     
-    except Exception as e:
-        print(f"❌ Error in generate_gradcam_analysis_incorrect_only: {e}")
-        traceback.print_exc()
+    finally:
+        # Always clean up hooks
+        cleanup_gradcam_hooks(gradcam_data)
     
     print(f"   📊 Generated {incorrect_count}/{total_attempts} individual GradCAM visualizations successfully")
-    print(f"   ✅ pytorch-grad-cam analysis complete!")
+    print(f"   ✅ Hook-based GradCAM analysis complete!")
     print(f"      Individual predictions saved in: {incorrect_dir}")
-    # Note: pytorch-grad-cam handles cleanup automatically
 
 
 def create_summary_report_incorrect_only(incorrect_samples, class_names, save_dir):
@@ -874,51 +896,32 @@ def generate_gradcam_disagreement(
     """
     print(f"\n🔥 Generating GradCAM for disagreement samples ({model1_name} correct, {model2_name} wrong)...")
     os.makedirs(save_dir, exist_ok=True)
-    
-    # Setup GradCAM for both models using pytorch-grad-cam
-    cam1 = setup_pytorch_gradcam(model1)
-    cam2 = setup_pytorch_gradcam(model2)
-    
+    gradcam_data1 = setup_gradcam_hooks(model1)
+    gradcam_data2 = setup_gradcam_hooks(model2)
     try:
         for i, (idx, label, pred1, conf1, pred2, conf2) in enumerate(disagreement_samples):
             image, _ = dataset[idx]
             input_tensor = image.unsqueeze(0).to(device)
-            
-            # Generate GradCAM for both models
-            gradcam1 = compute_gradcam_pytorch(cam1, input_tensor, target_class=pred1)
-            gradcam2 = compute_gradcam_pytorch(cam2, input_tensor, target_class=pred2)
-            
+            cam1 = compute_gradcam_hooks(model1, gradcam_data1, input_tensor, target_class=pred1)
+            cam2 = compute_gradcam_hooks(model2, gradcam_data2, input_tensor, target_class=pred2)
             rgb_img = tensor_to_rgb_image(image, model_config1)
-            
             fig, axes = plt.subplots(1, 3, figsize=(15, 5))
             axes[0].imshow(rgb_img)
             axes[0].set_title(f"Original\nTrue: {class_names[label]}")
-            
-            if gradcam1 is not None:
-                try:
-                    visualization1 = show_cam_on_image(rgb_img, np.clip(gradcam1, 0, 1), use_rgb=True, colormap=cv2.COLORMAP_JET)
-                    axes[1].imshow(visualization1)
-                except:
-                    axes[1].imshow(rgb_img)
+            if cam1 is not None:
+                axes[1].imshow(show_cam_on_image(rgb_img, np.clip(cam1, 0, 1), use_rgb=True, colormap=cv2.COLORMAP_JET))
                 axes[1].set_title(f"{model1_name} (Correct)\nPred: {class_names[pred1]} ({conf1:.2f})")
             else:
                 axes[1].text(0.5, 0.5, "GradCAM Failed", ha='center', va='center')
                 axes[1].set_title(f"{model1_name} (Correct)")
-            
-            if gradcam2 is not None:
-                try:
-                    visualization2 = show_cam_on_image(rgb_img, np.clip(gradcam2, 0, 1), use_rgb=True, colormap=cv2.COLORMAP_JET)
-                    axes[2].imshow(visualization2)
-                except:
-                    axes[2].imshow(rgb_img)
+            if cam2 is not None:
+                axes[2].imshow(show_cam_on_image(rgb_img, np.clip(cam2, 0, 1), use_rgb=True, colormap=cv2.COLORMAP_JET))
                 axes[2].set_title(f"{model2_name} (Wrong)\nPred: {class_names[pred2]} ({conf2:.2f})")
             else:
                 axes[2].text(0.5, 0.5, "GradCAM Failed", ha='center', va='center')
                 axes[2].set_title(f"{model2_name} (Wrong)")
-            
             for ax in axes: ax.axis('off')
             plt.tight_layout()
-            
             # New: Add "model1_true" or "model2_true" to filename depending on which model is correct
             fname = (
                 f"{i+1:03d}_true_{class_names[label]}"
@@ -928,66 +931,9 @@ def generate_gradcam_disagreement(
             plt.savefig(os.path.join(save_dir, fname), dpi=200, bbox_inches='tight')
             plt.close()
             print(f"   Saved: {fname}")
-    
-    except Exception as e:
-        print(f"❌ Error generating disagreement GradCAM: {e}")
-        traceback.print_exc()
-    
-    # Note: pytorch-grad-cam handles cleanup automatically
-
-def print_model_architecture_summary(model, model_name, input_size, num_classes):
-    """Print a comprehensive model architecture summary."""
-    print(f"\n{'='*60}")
-    print(f"🏗️ COMPREHENSIVE MODEL ARCHITECTURE ANALYSIS")
-    print(f"{'='*60}")
-    
-    print(f"📋 Basic Information:")
-    print(f"   Model name: {model_name}")
-    print(f"   Model class: {type(model).__name__}")
-    print(f"   Input size: {input_size}")
-    print(f"   Number of classes: {num_classes}")
-    
-    # Parameter analysis
-    print(f"\n📊 Parameter Analysis:")
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    frozen_params = total_params - trainable_params
-    
-    print(f"   Total parameters: {total_params:,}")
-    print(f"   Trainable parameters: {trainable_params:,}")
-    print(f"   Frozen parameters: {frozen_params:,}")
-    
-    if total_params > 0:
-        print(f"   Trainable ratio: {trainable_params/total_params*100:.1f}%")
-    
-    # Memory estimation (rough)
-    model_size_mb = total_params * 4 / (1024 * 1024)  # Assuming float32
-    print(f"   Estimated model size: {model_size_mb:.1f} MB")
-    
-    # Architecture breakdown by main components
-    print(f"\n🏗️ Architecture Breakdown:")
-    total_component_params = 0
-    
-    for name, module in model.named_children():
-        module_params = sum(p.numel() for p in module.parameters())
-        total_component_params += module_params
-        param_percentage = (module_params / total_params * 100) if total_params > 0 else 0
-        
-        print(f"   {name:15} | {type(module).__name__:20} | {module_params:>10,} params ({param_percentage:5.1f}%)")
-    
-    # Layer type summary
-    print(f"\n📋 Layer Type Summary:")
-    layer_counts = {}
-    for name, module in model.named_modules():
-        layer_type = type(module).__name__
-        if layer_type != type(model).__name__:  # Skip the root model
-            layer_counts[layer_type] = layer_counts.get(layer_type, 0) + 1
-    
-    for layer_type, count in sorted(layer_counts.items()):
-        print(f"   {layer_type:25} | {count:3d} layers")
-    
-    print(f"{'='*60}")
-
+    finally:
+        cleanup_gradcam_hooks(gradcam_data1)
+        cleanup_gradcam_hooks(gradcam_data2)
 
 def main():
     """Main inference and analysis function."""
@@ -1068,11 +1014,11 @@ def main():
     
     print(input_size1)
     
-    transform1 = transforms.Compose([
-    transforms.Resize((input_size1,input_size1), interpolation=transforms.InterpolationMode.BICUBIC),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=getattr(model_config1, 'mean', [0.5, 0.5, 0.5]), std=getattr(model_config1, 'std', [0.5, 0.5, 0.5]))
-    ])
+    # transform1 = transforms.Compose([
+    # transforms.Resize((input_size1,input_size1), interpolation=transforms.InterpolationMode.BICUBIC),
+    # transforms.ToTensor(),
+    # transforms.Normalize(mean=getattr(model_config1, 'mean', [0.5, 0.5, 0.5]), std=getattr(model_config1, 'std', [0.5, 0.5, 0.5]))
+    # ])
     
     # Update dataset transform
     if transform1:

@@ -152,7 +152,7 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
             # Populate model_config with defaults if not using timm
             model_config = {
                 'input_size': input_size,
-                'interpolation': 'bilinear', # Common default
+                'interpolation': 'bicubic', # Common default
                 'mean': (0.485, 0.456, 0.406), # ImageNet defaults
                 'std': (0.229, 0.224, 0.225),
                 'crop_pct': 0.875 # Common default
