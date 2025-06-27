@@ -414,6 +414,11 @@ class TimmAugmentationStrategy:
             transforms.RandomRotation(
                 degrees=45, fill=0, interpolation=self._get_interpolation()),  # Thêm xoay ngẫu nhiên
             BrightPixelStatistics(),
+            transforms.RandomPerspective(
+                distortion_scale=0.1,
+                p=0.2,
+            ),
+            BrightPixelStatistics(),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
             transforms.RandomAdjustSharpness(
