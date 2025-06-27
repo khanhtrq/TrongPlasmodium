@@ -431,14 +431,21 @@ class TimmAugmentationStrategy:
                 ratio=(0.8, 1.2),
                 interpolation=self._get_interpolation(),
             ),
+            transforms.ColorJitter(
+                brightness=0.1,
+                contrast=0.1,
+                saturation=0,
+                hue=0
+            ),
             transforms.ToTensor(),
             transforms.Normalize(mean=self.mean, std=self.std),
             transforms.RandomErasing(
                 p=0.2,
-                scale=(0.02, 0.1),
+                scale=(0.02, 0.05),
                 ratio=(0.3, 3.3),
                 value=0
             ),
+
         ])
 
     def _get_medium_transform(self):
