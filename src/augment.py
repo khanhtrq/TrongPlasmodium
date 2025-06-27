@@ -450,13 +450,16 @@ class TimmAugmentationStrategy:
                 ratio=(0.8, 1.2),
                 interpolation=self._get_interpolation()
             ),
+            BrightPixelStatistics(),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
             transforms.RandomRotation(degrees=30),
+            BrightPixelStatistics(),
             transforms.RandomPerspective(
                 distortion_scale=0.1,
                 p=0.2,
             ),
+            BrightPixelStatistics(),
             transforms.RandomAdjustSharpness(
                 sharpness_factor=5.0,
                 p=0.2
@@ -471,6 +474,7 @@ class TimmAugmentationStrategy:
                 scale=(0.95, 1.05),
                 shear=5
             ),
+            BrightPixelStatistics(),
             transforms.ToTensor(),
             transforms.Normalize(mean=self.mean, std=self.std),
             transforms.RandomErasing(
