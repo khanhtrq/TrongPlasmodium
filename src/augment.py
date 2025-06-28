@@ -65,7 +65,7 @@ class RandomPad:
 
 
 class BrightPixelStatistics:
-    def __init__(self, threshold=(190, 190, 190), dark_threshold=(20, 20, 20)):
+    def __init__(self, threshold=(190, 190, 190), dark_threshold=(5, 5, 5)):
         """
         Initialize BrightPixelStatistics transform.
 
@@ -400,7 +400,7 @@ class TimmAugmentationStrategy:
         """Light augmentation with basic geometric transforms."""
         return transforms.Compose([
             # Thêm padding ngẫu nhiên
-            RandomPad(max_pad_ratio=0.1, fill=0, p=0.5),
+            RandomPad(max_pad_ratio=0.2, fill=0, p=0.5),
             BrightPixelStatistics(),
             transforms.RandomAffine(
                 degrees=0,  # Độ xoay sẽ được xử lý bởi RandomRotation
@@ -413,11 +413,6 @@ class TimmAugmentationStrategy:
             BrightPixelStatistics(),
             transforms.RandomRotation(
                 degrees=45, fill=0, interpolation=self._get_interpolation()),  # Thêm xoay ngẫu nhiên
-            BrightPixelStatistics(),
-            transforms.RandomPerspective(
-                distortion_scale=0.1,
-                p=0.2,
-            ),
             BrightPixelStatistics(),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
@@ -436,21 +431,14 @@ class TimmAugmentationStrategy:
                 ratio=(0.8, 1.2),
                 interpolation=self._get_interpolation(),
             ),
-            transforms.ColorJitter(
-                brightness=0.1,
-                contrast=0.1,
-                saturation=0,
-                hue=0
-            ),
             transforms.ToTensor(),
             transforms.Normalize(mean=self.mean, std=self.std),
             transforms.RandomErasing(
                 p=0.2,
-                scale=(0.02, 0.05),
+                scale=(0.02, 0.1),
                 ratio=(0.3, 3.3),
                 value=0
             ),
-
         ])
 
     def _get_medium_transform(self):
