@@ -416,15 +416,15 @@ class TimmAugmentationStrategy:
             BrightPixelStatistics(),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
-            # transforms.RandomAdjustSharpness(
-            #     sharpness_factor=5.0,
-            #     p=0.2,
+            transforms.RandomAdjustSharpness(
+                sharpness_factor=5.0,
+                p=0.2,
 
-            # ),
-            # transforms.GaussianBlur(
-            #     kernel_size=(5, 5),
-            #     sigma=(0.1, 2.0),
-            # ),
+            ),
+            transforms.GaussianBlur(
+                kernel_size=(5, 5),
+                sigma=(0.1, 2.0),
+            ),
             transforms.RandomResizedCrop(
                 self.input_size,
                 scale=(0.7, 1),
