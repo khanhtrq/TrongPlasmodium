@@ -420,7 +420,7 @@ class TimmAugmentationStrategy:
             ),
             transforms.GaussianBlur(
                 kernel_size=(5, 5),
-                sigma=(0.1, 2.0),
+                sigma=(1.0, 2.0),
             ),
             transforms.ToTensor(),
             transforms.Normalize(mean=self.mean, std=self.std),
@@ -1421,7 +1421,7 @@ def test_mixup_cutmix_wrapper(image_path1, image_path2, num_classes=6, output_di
     print(f"\n🔄 Testing MixUp...")
     try:
         mixup_wrapper = MixupCutmixWrapper(
-            mixup_alpha=0.2,
+            mixup_alpha=0.3,
             cutmix_alpha=0.0,  # Tắt CutMix
             prob=1.0,
             switch_prob=0.0,  # Chỉ dùng MixUp
@@ -1432,21 +1432,33 @@ def test_mixup_cutmix_wrapper(image_path1, image_path2, num_classes=6, output_di
             mixed_images_mixup, mixed_labels_mixup = mixup_wrapper(
                 batch_images.clone(), batch_labels.clone())
             print(f"✅ MixUp applied successfully")
+            print(f"📊 Original labels: {batch_labels.tolist()}")
+            print(f"📊 MixUp labels shape: {mixed_labels_mixup.shape}")
+            if mixed_labels_mixup.ndim > 1:
+                print(
+                    f"📊 MixUp soft labels [0]: {mixed_labels_mixup[0].tolist()}")
+                print(
+                    f"📊 MixUp soft labels [1]: {mixed_labels_mixup[1].tolist()}")
+            else:
+                print(f"📊 MixUp labels: {mixed_labels_mixup.tolist()}")
             mixup_result = mixed_images_mixup[0]  # Lấy ảnh đầu tiên
+            mixup_labels = mixed_labels_mixup
         else:
             print(f"⚠️ MixUp not available, using original")
             mixup_result = batch_images[0]
+            mixup_labels = batch_labels
 
     except Exception as e:
         print(f"❌ Error with MixUp: {e}")
         mixup_result = batch_images[0]
+        mixup_labels = batch_labels
 
     # Test CutMix riêng biệt
     print(f"\n✂️ Testing CutMix...")
     try:
         cutmix_wrapper = MixupCutmixWrapper(
             mixup_alpha=0.0,  # Tắt MixUp
-            cutmix_alpha=0.5,
+            cutmix_alpha=0.1,
             prob=1.0,
             switch_prob=1.0,  # Chỉ dùng CutMix
             num_classes=num_classes
@@ -1456,14 +1468,26 @@ def test_mixup_cutmix_wrapper(image_path1, image_path2, num_classes=6, output_di
             mixed_images_cutmix, mixed_labels_cutmix = cutmix_wrapper(
                 batch_images.clone(), batch_labels.clone())
             print(f"✅ CutMix applied successfully")
+            print(f"📊 Original labels: {batch_labels.tolist()}")
+            print(f"📊 CutMix labels shape: {mixed_labels_cutmix.shape}")
+            if mixed_labels_cutmix.ndim > 1:
+                print(
+                    f"📊 CutMix soft labels [0]: {mixed_labels_cutmix[0].tolist()}")
+                print(
+                    f"📊 CutMix soft labels [1]: {mixed_labels_cutmix[1].tolist()}")
+            else:
+                print(f"📊 CutMix labels: {mixed_labels_cutmix.tolist()}")
             cutmix_result = mixed_images_cutmix[0]  # Lấy ảnh đầu tiên
+            cutmix_labels = mixed_labels_cutmix
         else:
             print(f"⚠️ CutMix not available, using original")
             cutmix_result = batch_images[0]
+            cutmix_labels = batch_labels
 
     except Exception as e:
         print(f"❌ Error with CutMix: {e}")
         cutmix_result = batch_images[0]
+        cutmix_labels = batch_labels
 
     # Hàm để denormalize tensor thành PIL Image
     def tensor_to_pil(tensor):
@@ -1491,20 +1515,32 @@ def test_mixup_cutmix_wrapper(image_path1, image_path2, num_classes=6, output_di
 
     # Hàng đầu: Input images và MixUp result
     axes[0, 0].imshow(img1_pil)
-    axes[0, 0].set_title('Input Image 1')
+    axes[0, 0].set_title(f'Input Image 1\nLabel: {batch_labels[0].item()}')
     axes[0, 0].axis('off')
 
     axes[0, 1].imshow(img2_pil)
-    axes[0, 1].set_title('Input Image 2')
+    axes[0, 1].set_title(f'Input Image 2\nLabel: {batch_labels[1].item()}')
     axes[0, 1].axis('off')
 
+    # Format MixUp label display
+    if hasattr(mixup_labels, 'ndim') and mixup_labels.ndim > 1 and len(mixup_labels) > 0:
+        mixup_label_str = f"Soft: [{mixup_labels[0][0]:.3f}, {mixup_labels[0][1]:.3f}]"
+    else:
+        mixup_label_str = f"Hard: {mixup_labels[0].item() if hasattr(mixup_labels, 'item') else 'N/A'}"
+
     axes[0, 2].imshow(mixup_pil)
-    axes[0, 2].set_title('MixUp Result\n(Blended)')
+    axes[0, 2].set_title(f'MixUp Result\n{mixup_label_str}')
     axes[0, 2].axis('off')
 
     # Hàng thứ hai: CutMix result và combined view
+    # Format CutMix label display
+    if hasattr(cutmix_labels, 'ndim') and cutmix_labels.ndim > 1 and len(cutmix_labels) > 0:
+        cutmix_label_str = f"Soft: [{cutmix_labels[0][0]:.3f}, {cutmix_labels[0][1]:.3f}]"
+    else:
+        cutmix_label_str = f"Hard: {cutmix_labels[0].item() if hasattr(cutmix_labels, 'item') else 'N/A'}"
+
     axes[1, 0].imshow(cutmix_pil)
-    axes[1, 0].set_title('CutMix Result\n(Patch Mixed)')
+    axes[1, 0].set_title(f'CutMix Result\n{cutmix_label_str}')
     axes[1, 0].axis('off')
 
     # So sánh side-by-side MixUp vs CutMix
@@ -1516,21 +1552,44 @@ def test_mixup_cutmix_wrapper(image_path1, image_path2, num_classes=6, output_di
     axes[1, 1].set_title('MixUp vs CutMix\n(Side by Side)')
     axes[1, 1].axis('off')
 
-    # Thống kê
-    axes[1, 2].text(0.1, 0.9, 'Augmentation Stats:', fontsize=12,
+    # Thống kê với thông tin labels
+    axes[1, 2].text(0.1, 0.95, 'Augmentation Stats:', fontsize=12,
                     weight='bold', transform=axes[1, 2].transAxes)
     axes[1, 2].text(
-        0.1, 0.8, f'✅ MixUp: {"Enabled" if mixup_wrapper.is_enabled() else "Disabled"}', transform=axes[1, 2].transAxes)
+        0.1, 0.85, f'✅ MixUp: {"Enabled" if mixup_wrapper.is_enabled() else "Disabled"}', transform=axes[1, 2].transAxes)
     axes[1, 2].text(
-        0.1, 0.7, f'✅ CutMix: {"Enabled" if cutmix_wrapper.is_enabled() else "Disabled"}', transform=axes[1, 2].transAxes)
+        0.1, 0.75, f'✅ CutMix: {"Enabled" if cutmix_wrapper.is_enabled() else "Disabled"}', transform=axes[1, 2].transAxes)
     axes[1, 2].text(
-        0.1, 0.6, f'📊 Input size: {batch_images.shape}', transform=axes[1, 2].transAxes)
+        0.1, 0.65, f'📊 Input size: {batch_images.shape}', transform=axes[1, 2].transAxes)
     axes[1, 2].text(
-        0.1, 0.5, f'🎯 Classes: {num_classes}', transform=axes[1, 2].transAxes)
-    axes[1, 2].text(0.1, 0.4, f'🔧 MixUp α: 0.8',
+        0.1, 0.55, f'🎯 Classes: {num_classes}', transform=axes[1, 2].transAxes)
+    axes[1, 2].text(0.1, 0.45, f'🔧 MixUp α: 0.3',
                     transform=axes[1, 2].transAxes)
-    axes[1, 2].text(0.1, 0.3, f'✂️ CutMix α: 1.0',
+    axes[1, 2].text(0.1, 0.35, f'✂️ CutMix α: 0.1',
                     transform=axes[1, 2].transAxes)
+
+    # Thêm thông tin về labels
+    axes[1, 2].text(0.1, 0.25, 'Label Info:', fontsize=10, weight='bold',
+                    transform=axes[1, 2].transAxes)
+    axes[1, 2].text(0.1, 0.20, f'Orig: [{batch_labels[0].item()}, {batch_labels[1].item()}]',
+                    fontsize=9, transform=axes[1, 2].transAxes)
+
+    # MixUp label info
+    if hasattr(mixup_labels, 'ndim') and mixup_labels.ndim > 1:
+        axes[1, 2].text(0.1, 0.15, f'Mix: [{mixup_labels[0][0]:.2f}, {mixup_labels[0][1]:.2f}]',
+                        fontsize=9, transform=axes[1, 2].transAxes)
+    else:
+        axes[1, 2].text(0.1, 0.15, f'Mix: {mixup_labels[0].item() if hasattr(mixup_labels, "item") else "N/A"}',
+                        fontsize=9, transform=axes[1, 2].transAxes)
+
+    # CutMix label info
+    if hasattr(cutmix_labels, 'ndim') and cutmix_labels.ndim > 1:
+        axes[1, 2].text(0.1, 0.10, f'Cut: [{cutmix_labels[0][0]:.2f}, {cutmix_labels[0][1]:.2f}]',
+                        fontsize=9, transform=axes[1, 2].transAxes)
+    else:
+        axes[1, 2].text(0.1, 0.10, f'Cut: {cutmix_labels[0].item() if hasattr(cutmix_labels, "item") else "N/A"}',
+                        fontsize=9, transform=axes[1, 2].transAxes)
+
     axes[1, 2].axis('off')
 
     # Lưu ảnh
@@ -1560,6 +1619,14 @@ def test_mixup_cutmix_wrapper(image_path1, image_path2, num_classes=6, output_di
     print(f"\n🎉 MixUp/CutMix test completed!")
     print(f"📁 All results saved in: {output_dir}")
 
+    # In thêm thông tin về labels để debug
+    print(f"\n📋 Label Analysis:")
+    print(f"   Original labels: {batch_labels.tolist()}")
+    if hasattr(mixup_labels, 'ndim') and mixup_labels.ndim > 1:
+        print(f"   MixUp soft labels: {mixup_labels.tolist()}")
+    if hasattr(cutmix_labels, 'ndim') and cutmix_labels.ndim > 1:
+        print(f"   CutMix soft labels: {cutmix_labels.tolist()}")
+
     return mixup_pil, cutmix_pil, comparison_img
 
 
@@ -1573,7 +1640,7 @@ def interactive_mixup_cutmix_test():
     print("=" * 50)
 
     # Default paths
-    default_img1 = r"X:\datn\v2_malaria_full_class_classification\v2_malaria_full_class_classification\train\064\rbc_parasitized_F_S1\cell2.jpg"
+    default_img1 = r"X:\datn\PlasmodiumClassification-1\step_by_step_test\step_11_Step_11__GaussianBlur.jpg"
     default_img2 = r"X:\datn\v2_malaria_full_class_classification\v2_malaria_full_class_classification\test\084\rbc_parasitized_F_TJ\cell2.jpg"
 
     # Get first image path

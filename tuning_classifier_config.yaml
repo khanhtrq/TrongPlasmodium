@@ -57,14 +57,14 @@ model_names:
 # --- Data Augmentation Configuration ---
 augmentation:
   enabled: true                      # Enable/disable augmentation
-  strategy: 'medium'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
+  strategy: 'light'                 # Options: 'minimal', 'light', 'medium', 'heavy', 'extreme'
   auto_augment_policy: 'original'   # AutoAugment policy: 'original', 'originalr', 'v0', 'v0r'
   randaugment_magnitude: 9          # RandAugment magnitude (0-30)
   randaugment_num_ops: 2            # Number of RandAugment operations per image
-  mixup_alpha: 0.2                 # MixUp alpha parameter (0 = disabled)
-  cutmix_alpha: 0.2                 # CutMix alpha parameter (0 = disabled)
+  mixup_alpha: 0.3                 # MixUp alpha parameter (0 = disabled)
+  cutmix_alpha: 0.1                 # CutMix alpha parameter (0 = disabled)
   mixup_cutmix_prob: 0.5          # Probability of applying MixUp/CutMix
-  switch_prob: 0.5                  # Probability of switching between MixUp and CutMix
+  switch_prob: 0.2                  # Probability of switching between MixUp and CutMix
   random_erase_prob: 0.25           # Random erasing probability
   label_smoothing: 0.1              # Label smoothing factor
   # Advanced settings (only for 'heavy' and 'extreme' strategies)
@@ -86,7 +86,7 @@ training:
 # --- Regularization Configuration ---
 regularization:
   max_norm:
-    enabled: false              # Enable/disable max-norm regularization via PGD
+    enabled: true              # Enable/disable max-norm regularization via PGD
     thresh: 0.1                 # Threshold parameter for max-norm constraint
     lp_norm: 2                  # Lp norm to use (typically 2)
     tau: 1                      # Tau parameter for norm calculation
@@ -152,7 +152,7 @@ classifier_only_training:
   
   # WeightedRandomSampler for classifier training (inherits from main config if not specified)
   weighted_random_sampler:
-    enabled: true                    # Enable/disable for classifier training specifically
+    enabled: false                    # Enable/disable for classifier training specifically
     replacement: true                 # Whether to sample with replacement
     weight_calculation: 'inverse'     # Options: 'inverse', 'balanced', 'custom'
     apply_sqrt: false                 # Apply square root to computed weights
@@ -175,7 +175,7 @@ classifier_only_training:
 
   # Optional: Define specific criteria for classifier training
   # If not defined, it might reuse criteria from the main training (depending on main.py logic)
-  criterion_a: crossentropyloss # Example criterion for classifier training
+  criterion_a: cbloss # Example criterion for classifier training
   criterion_a_params:
     # use_class_weights: false # Or true, with weights calculated for this phase if needed
     gamma: 2.0
@@ -213,6 +213,6 @@ device:
 pretrained_model:
   enabled: true                    # Set to true to load from checkpoint
   model_name: 'efficientnet_b1.ra4_e3600_r240_in1k'  # Model architecture name (must match one in model_names)
-  model_path: 'model/efficientnet_b1.ra4_e3600_r240_in1k_best.pth'
+  model_path: 'model/newmodel_aug.pth'
   # Note: If enabled=true, only the specified model_name will be trained
 
