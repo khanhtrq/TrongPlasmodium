@@ -64,10 +64,10 @@ class RandomPad:
         return F.pad(img, padding, fill=self.fill)
 
 
-class BrightPixelStatistics:
+class BackgroundRefilling:
     def __init__(self, threshold=(190, 190, 190), dark_threshold=(5, 5, 5)):
         """
-        Initialize BrightPixelStatistics transform.
+        Initialize BackgroundRefilling transform.
 
         Args:
             threshold (tuple): RGB threshold values for identifying bright pixels (0-255)
@@ -390,18 +390,9 @@ class TimmAugmentationStrategy:
     def _get_minimal_transform(self):
         """Minimal augmentation for conservative training."""
         return transforms.Compose([
-            transforms.Resize(self.input_size),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=self.mean, std=self.std)
-        ])
-
-    def _get_light_transform(self):
-        """Light augmentation with basic geometric transforms."""
-        return transforms.Compose([
             # Thêm padding ngẫu nhiên
-            RandomPad(max_pad_ratio=0.2, fill=0, p=0.5),
-            BrightPixelStatistics(),
+            RandomPad(max_pad_ratio=0.2, fill=0, p=1),
+            BackgroundRefilling(),
             transforms.RandomAffine(
                 degrees=0,  # Độ xoay sẽ được xử lý bởi RandomRotation
                 translate=(0.05, 0.05),
@@ -410,10 +401,55 @@ class TimmAugmentationStrategy:
                 fill=0,
                 interpolation=self._get_interpolation()
             ),
-            BrightPixelStatistics(),
+            BackgroundRefilling(),
+            transforms.RandomRotation(
+                degrees=30, fill=0, interpolation=self._get_interpolation()),  # Thêm xoay ngẫu nhiên
+            BackgroundRefilling(),
+            transforms.RandomHorizontalFlip(p=1),
+            transforms.RandomVerticalFlip(p=1),
+            transforms.RandomResizedCrop(
+                self.input_size,
+                scale=(0.7, 1),
+                ratio=(0.8, 1.2),
+                interpolation=self._get_interpolation(),
+            ),
+            transforms.RandomAdjustSharpness(
+                sharpness_factor=5.0,
+                p=1,
+
+            ),
+            transforms.GaussianBlur(
+                kernel_size=(5, 5),
+                sigma=(0.1, 2.0),
+            ),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=self.mean, std=self.std),
+            # transforms.RandomErasing(
+            #     p=0.2,
+            #     scale=(0.02, 0.1),
+            #     ratio=(0.3, 3.3),
+            #     value=0
+            # ),
+        ])
+
+    def _get_light_transform(self):
+        """Light augmentation with basic geometric transforms."""
+        return transforms.Compose([
+            # Thêm padding ngẫu nhiên
+            RandomPad(max_pad_ratio=0.2, fill=0, p=0.5),
+            BackgroundRefilling(),
+            transforms.RandomAffine(
+                degrees=0,  # Độ xoay sẽ được xử lý bởi RandomRotation
+                translate=(0.05, 0.05),
+                scale=(0.95, 1.05),
+                shear=5,
+                fill=0,
+                interpolation=self._get_interpolation()
+            ),
+            BackgroundRefilling(),
             transforms.RandomRotation(
                 degrees=45, fill=0, interpolation=self._get_interpolation()),  # Thêm xoay ngẫu nhiên
-            BrightPixelStatistics(),
+            BackgroundRefilling(),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
             transforms.RandomAdjustSharpness(
@@ -1578,6 +1614,330 @@ def interactive_mixup_cutmix_test():
         print(f"❌ Test failed!")
 
 
+def test_transform_step_by_step(image_path, strategy='light', output_dir="step_by_step_test"):
+    """
+    Test và hiển thị kết quả từng bước transform của một strategy.
+
+    Args:
+        image_path (str): Đường dẫn đến ảnh test
+        strategy (str): Strategy augmentation để test
+        output_dir (str): Thư mục lưu kết quả
+    """
+    import matplotlib.pyplot as plt
+    import os
+    from PIL import Image
+    import copy
+
+    print(f"🔍 Testing {strategy} transform step-by-step on: {image_path}")
+
+    # Tạo thư mục output
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Load ảnh gốc
+    try:
+        original_img = Image.open(image_path).convert('RGB')
+        print(f"✅ Loaded image: {original_img.size}")
+    except Exception as e:
+        print(f"❌ Error loading image: {e}")
+        return
+
+    # Tạo augmentation strategy
+    try:
+        aug_strategy = TimmAugmentationStrategy(
+            strategy=strategy,
+            input_size=224,
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225)
+        )
+        train_transform = aug_strategy.get_train_transform()
+    except Exception as e:
+        print(f"❌ Error creating strategy: {e}")
+        return
+
+    # Lấy danh sách các transforms
+    if hasattr(train_transform, 'transforms'):
+        transforms_list = train_transform.transforms
+    else:
+        transforms_list = [train_transform]
+
+    print(f"📊 Found {len(transforms_list)} transform steps")
+
+    # Áp dụng từng transform và lưu kết quả
+    current_img = original_img.copy()
+    results = [('Original', original_img.copy())]
+
+    for i, transform in enumerate(transforms_list):
+        transform_name = transform.__class__.__name__
+        print(f"\n🔄 Step {i+1}: Applying {transform_name}")
+
+        try:
+            # Áp dụng transform riêng lẻ
+            if transform_name in ['ToTensor', 'Normalize']:
+                # Xử lý đặc biệt cho tensor transforms
+                if transform_name == 'ToTensor':
+                    current_img = transform(current_img)
+                    # Convert back to PIL for visualization
+                    if isinstance(current_img, torch.Tensor):
+                        img_array = current_img.permute(1, 2, 0).numpy()
+                        display_img = Image.fromarray(
+                            (img_array * 255).astype(np.uint8))
+                    else:
+                        display_img = current_img
+                elif transform_name == 'Normalize':
+                    if isinstance(current_img, torch.Tensor):
+                        normalized = transform(current_img)
+                        # Denormalize for display
+                        mean = torch.tensor(
+                            [0.485, 0.456, 0.406]).view(3, 1, 1)
+                        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+                        denormalized = normalized * std + mean
+                        denormalized = torch.clamp(denormalized, 0, 1)
+                        img_array = denormalized.permute(1, 2, 0).numpy()
+                        display_img = Image.fromarray(
+                            (img_array * 255).astype(np.uint8))
+                        current_img = normalized  # Keep normalized for next steps
+                    else:
+                        display_img = current_img
+            else:
+                # Transforms thông thường (PIL)
+                if isinstance(current_img, torch.Tensor):
+                    # Skip if current is tensor but transform expects PIL
+                    display_img = results[-1][1]  # Use previous result
+                    print(
+                        f"⚠️ Skipping {transform_name} - incompatible with tensor")
+                else:
+                    current_img = transform(current_img)
+                    display_img = current_img.copy() if hasattr(
+                        current_img, 'copy') else current_img
+
+            results.append((f"Step {i+1}: {transform_name}", display_img))
+            print(f"✅ {transform_name} applied successfully")
+
+        except Exception as e:
+            print(f"❌ Error applying {transform_name}: {e}")
+            # Use previous result as fallback
+            results.append(
+                (f"Step {i+1}: {transform_name} (Error)", results[-1][1]))
+
+    # Tạo visualization
+    print(f"\n🖼️ Creating step-by-step visualization...")
+
+    # Tính toán grid size
+    n_results = len(results)
+    cols = min(4, n_results)
+    rows = (n_results + cols - 1) // cols
+
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4))
+    fig.suptitle(
+        f'{strategy.capitalize()} Transform Step-by-Step Analysis', fontsize=16)
+
+    # Flatten axes for easier indexing
+    if rows == 1 and cols == 1:
+        axes = [axes]
+    elif rows == 1 or cols == 1:
+        axes = axes.flatten()
+    else:
+        axes = axes.flatten()
+
+    # Hiển thị từng bước
+    for idx, (title, img) in enumerate(results):
+        if idx < len(axes):
+            try:
+                axes[idx].imshow(img)
+                axes[idx].set_title(title, fontsize=10, pad=10)
+                axes[idx].axis('off')
+
+                # Lưu ảnh riêng lẻ
+                step_filename = f"step_{idx:02d}_{title.replace(':', '_').replace(' ', '_')}.jpg"
+                step_path = os.path.join(output_dir, step_filename)
+                if hasattr(img, 'save'):
+                    img.save(step_path)
+                    print(f"💾 Saved: {step_filename}")
+
+            except Exception as e:
+                print(f"❌ Error displaying step {idx}: {e}")
+                axes[idx].text(0.5, 0.5, f'Error\n{title}',
+                               ha='center', va='center', transform=axes[idx].transAxes)
+                axes[idx].axis('off')
+
+    # Ẩn các subplot thừa
+    for idx in range(len(results), len(axes)):
+        axes[idx].axis('off')
+
+    # Lưu và hiển thị comparison
+    plt.tight_layout()
+    comparison_path = os.path.join(
+        output_dir, f'{strategy}_step_by_step_analysis.png')
+    plt.savefig(comparison_path, dpi=150, bbox_inches='tight')
+    print(f"✅ Saved complete analysis to: {comparison_path}")
+
+    plt.show()
+
+    # In summary
+    print(f"\n📋 Transform Summary:")
+    for i, (title, _) in enumerate(results):
+        if i == 0:
+            continue
+        transform_name = title.split(': ')[1] if ': ' in title else title
+        print(f"   {i}. {transform_name}")
+
+    print(f"\n🎉 Step-by-step analysis completed!")
+    print(f"📁 Results saved in: {output_dir}")
+
+
+def compare_strategies_step_by_step(image_path, strategies=['minimal', 'light', 'medium'], output_dir="strategy_comparison"):
+    """
+    So sánh kết quả cuối cùng của nhiều strategies.
+
+    Args:
+        image_path (str): Đường dẫn đến ảnh test
+        strategies (list): Danh sách strategies để so sánh
+        output_dir (str): Thư mục lưu kết quả
+    """
+    import matplotlib.pyplot as plt
+    import os
+    from PIL import Image
+
+    print(f"🔍 Comparing strategies: {', '.join(strategies)}")
+
+    # Tạo thư mục output
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Load ảnh gốc
+    try:
+        original_img = Image.open(image_path).convert('RGB')
+    except Exception as e:
+        print(f"❌ Error loading image: {e}")
+        return
+
+    results = [('Original', original_img)]
+
+    # Test từng strategy
+    for strategy in strategies:
+        print(f"\n🔄 Testing {strategy} strategy...")
+        try:
+            aug_strategy = TimmAugmentationStrategy(
+                strategy=strategy,
+                input_size=224,
+                mean=(0.485, 0.456, 0.406),
+                std=(0.229, 0.224, 0.225)
+            )
+
+            train_transform = aug_strategy.get_train_transform()
+            result_tensor = train_transform(original_img.copy())
+
+            # Convert tensor back to PIL
+            if isinstance(result_tensor, torch.Tensor):
+                mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+                std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+                denormalized = result_tensor * std + mean
+                denormalized = torch.clamp(denormalized, 0, 1)
+                img_array = denormalized.permute(1, 2, 0).numpy()
+                result_img = Image.fromarray(
+                    (img_array * 255).astype(np.uint8))
+            else:
+                result_img = result_tensor
+
+            results.append((f'{strategy.capitalize()}', result_img))
+            print(f"✅ {strategy} completed")
+
+        except Exception as e:
+            print(f"❌ Error with {strategy}: {e}")
+            results.append((f'{strategy.capitalize()} (Error)', original_img))
+
+    # Tạo comparison plot
+    n_results = len(results)
+    cols = min(4, n_results)
+    rows = (n_results + cols - 1) // cols
+
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 3))
+    fig.suptitle('Strategy Comparison Results', fontsize=16)
+
+    if rows == 1 and cols == 1:
+        axes = [axes]
+    elif rows == 1 or cols == 1:
+        axes = axes.flatten()
+    else:
+        axes = axes.flatten()
+
+    for idx, (title, img) in enumerate(results):
+        if idx < len(axes):
+            axes[idx].imshow(img)
+            axes[idx].set_title(title, fontsize=12)
+            axes[idx].axis('off')
+
+            # Lưu ảnh riêng
+            filename = f"{title.lower().replace(' ', '_')}_result.jpg"
+            filepath = os.path.join(output_dir, filename)
+            if hasattr(img, 'save'):
+                img.save(filepath)
+
+    # Ẩn subplot thừa
+    for idx in range(len(results), len(axes)):
+        axes[idx].axis('off')
+
+    plt.tight_layout()
+    comparison_path = os.path.join(output_dir, 'strategy_comparison.png')
+    plt.savefig(comparison_path, dpi=150, bbox_inches='tight')
+    plt.show()
+
+    print(f"✅ Strategy comparison saved to: {comparison_path}")
+
+
+def interactive_step_by_step_test():
+    """
+    Interactive function để test step-by-step transforms.
+    """
+    import os
+
+    print("🎮 Interactive Step-by-Step Transform Test")
+    print("=" * 50)
+
+    default_image_path = r"X:\datn\v2_malaria_full_class_classification\v2_malaria_full_class_classification\train\064\rbc_parasitized_F_S1\cell2.jpg"
+
+    # Get image path
+    image_path = input(
+        f"\n📁 Enter image path (or press Enter for default): ").strip()
+    if not image_path:
+        image_path = default_image_path
+        print(f"Using default: {os.path.basename(image_path)}")
+    elif not os.path.exists(image_path):
+        print("❌ File not found, using default")
+        image_path = default_image_path
+
+    # Choose test type
+    print("\n🔧 Choose test type:")
+    print("1. Step-by-step analysis of one strategy")
+    print("2. Compare final results of multiple strategies")
+    print("3. Both tests")
+
+    choice = input("Enter choice (1-3): ").strip()
+
+    if choice in ['1', '3']:
+        # Single strategy step-by-step
+        print("\n📋 Choose strategy:")
+        strategies = ['minimal', 'light', 'medium', 'heavy', 'extreme']
+        for i, strategy in enumerate(strategies, 1):
+            print(f"{i}. {strategy}")
+
+        while True:
+            strategy_choice = input("Enter strategy number (1-5): ").strip()
+            if strategy_choice in ['1', '2', '3', '4', '5']:
+                selected_strategy = strategies[int(strategy_choice) - 1]
+                break
+            else:
+                print("❌ Invalid choice")
+
+        print(f"\n🚀 Running step-by-step analysis for {selected_strategy}...")
+        test_transform_step_by_step(image_path, selected_strategy)
+
+    if choice in ['2', '3']:
+        # Multiple strategy comparison        print(f"\n🚀 Running strategy comparison...")
+        compare_strategies_step_by_step(image_path)
+
+    print("\n🎉 All tests completed!")
+
+
 if __name__ == "__main__":
     import sys
 
@@ -1600,8 +1960,9 @@ if __name__ == "__main__":
         print("1. Test augmentation functions")
         print("2. Interactive image augmentation test")
         print("3. Test MixUp/CutMix wrapper")
+        print("4. Step-by-step transform analysis")
 
-        choice = input("Enter your choice (1-3): ").strip()
+        choice = input("Enter your choice (1-4): ").strip()
 
         if choice == "1":
             test_augmentations()
@@ -1609,6 +1970,8 @@ if __name__ == "__main__":
             interactive_augmentation_test()
         elif choice == "3":
             interactive_mixup_cutmix_test()
+        elif choice == "4":
+            interactive_step_by_step_test()
         else:
             print("Running basic augmentation tests...")
             test_augmentations()

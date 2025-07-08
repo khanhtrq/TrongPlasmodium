@@ -66,3 +66,5 @@ results_*/ # Catch results_local, results_kaggle, etc.
 
 !model/*
 !model
+multiple_augmentations/
+step_by_step_test
