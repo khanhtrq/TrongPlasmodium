@@ -175,7 +175,7 @@ classifier_only_training:
 
   # Optional: Define specific criteria for classifier training
   # If not defined, it might reuse criteria from the main training (depending on main.py logic)
-  criterion_a: crossentropyloss # Example criterion for classifier training
+  criterion_a: ldamloss # Example criterion for classifier training
   criterion_a_params:
     # use_class_weights: false # Or true, with weights calculated for this phase if needed
     # loss_type: 'softmax' # Options: 'sigmoid', 'focal', etc.
