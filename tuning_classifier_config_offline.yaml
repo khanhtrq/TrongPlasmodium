@@ -4,14 +4,14 @@ data_dir: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification
 # --- Datasets Configuration (List) ---
 datasets:
   - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
-    annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
-    annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
-    annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
-    annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
+    annotation_train: 'X:/datn/v2_malaria_full_class_classification/v2_malaria_full_class_classification/train_annotation_6classes.txt'
+    annotation_val: 'X:/datn/v2_malaria_full_class_classification/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
+    annotation_test: 'X:/datn/v2_malaria_full_class_classification/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
+    annotation_root: 'X:/datn/v2_malaria_full_class_classification/v2_malaria_full_class_classification'
 
 
 batch_size: 32
-num_workers: 8 # Set to 0 to avoid multiprocessing issues on Windows
+num_workers: 0 # Set to 0 to avoid multiprocessing issues on Windows
 
 # --- Reproducibility Configuration ---
 seed: 42 # Random seed for reproducible results
@@ -175,7 +175,7 @@ classifier_only_training:
 
   # Optional: Define specific criteria for classifier training
   # If not defined, it might reuse criteria from the main training (depending on main.py logic)
-  criterion_a: bmcloss # Example criterion for classifier training
+  criterion_a: cbloss # Example criterion for classifier training
   criterion_a_params:
     # use_class_weights: false # Or true, with weights calculated for this phase if needed
     # loss_type: 'softmax' # Options: 'sigmoid', 'focal', etc.
