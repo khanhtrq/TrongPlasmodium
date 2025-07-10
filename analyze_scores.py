@@ -305,7 +305,7 @@ def calculate_classification_metrics_v2(file_path):
 
 if __name__ == "__main__":
     # Thay 'du_lieu_cua_ban.txt' bằng đường dẫn thực tế đến file của bạn
-    file_path = r"X:\datn\new\base + all 0.3 0.1 no erase\PlasmodiumClassification-1\results_kaggle\efficientnet_b1.ra4_e3600_r240_in1k\efficientnet_b1.ra4_e3600_r240_in1k_test_eval_predictions.txt"
+    file_path = r"X:\datn\new\new tau bmc\PlasmodiumClassification-1\results_kaggle\efficientnet_b1.ra4_e3600_r240_in1k_classifier_finetune\efficientnet_b1.ra4_e3600_r240_in1k_classifier_test_eval_predictions.txt"
     # Nếu bạn muốn chạy với file của mình:
     print(f"\n--- Phân tích file: {file_path} ---")
     calculate_classification_metrics_v2(file_path)
