@@ -2,28 +2,24 @@
 GradCAM Analysis for Incorrect Predictions
 
 This script performs GradCAM analysis focusing on incorrect predictions to understand 
-model failures. It uses the pytorch-grad-cam library for reliable and efficient 
-GradCAM computation.
+model failures. Uses manual GradCAM implementation with hooks for reliable computation.
 
 Key features:
-- Uses pytorch-grad-cam library instead of manual hook-based implementation
+- Manual GradCAM implementation using forward/backward hooks
 - Analyzes only incorrect predictions to focus on failure cases
 - Generates comprehensive summary visualizations
 - Supports model comparison and disagreement analysis
 - Windows-compatible with multiprocessing safeguards
 
-Updated: Uses pytorch-grad-cam for more stable and efficient GradCAM computation
+Updated: Uses manual GradCAM implementation for better control
 """
 
 # Configuration for model architecture printing
 from src.device_handler import get_device
 from src.data_loader import AnnotationDataset, ImageFolderWrapper, collate_fn_skip_error
 from src.model_initializer import initialize_model
-from pytorch_grad_cam.utils.image import show_cam_on_image
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from pytorch_grad_cam import GradCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad, HiResCAM, GradCAMElementWise
 import torchvision.transforms as transforms
-import traceback  # Thêm import traceback
+import traceback
 import cv2
 from PIL import Image
 import warnings
@@ -38,8 +34,6 @@ import os
 # Set to False to disable detailed architecture printing
 PRINT_MODEL_ARCHITECTURE = True
 
-# pytorch-grad-cam imports
-
 
 def reshape_transform(tensor, height=14, width=14):
     result = tensor[:, 1:, :].reshape(tensor.size(0),
@@ -51,10 +45,91 @@ def reshape_transform(tensor, height=14, width=14):
     return result
 
 
+class ManualGradCAM:
+    """Manual GradCAM implementation using hooks"""
+
+    def __init__(self, model, target_layer):
+        self.model = model
+        self.target_layer = target_layer
+        self.gradients = None
+        self.activations = None
+        self.hooks = []
+
+        self._register_hooks()
+
+    def _register_hooks(self):
+        """Register forward and backward hooks"""
+        def forward_hook(module, input, output):
+            self.activations = output.detach()
+
+        def backward_hook(module, grad_input, grad_output):
+            self.gradients = grad_output[0].detach()
+
+        # Register hooks
+        forward_handle = self.target_layer.register_forward_hook(forward_hook)
+        backward_handle = self.target_layer.register_backward_hook(
+            backward_hook)
+
+        self.hooks = [forward_handle, backward_handle]
+
+    def generate_cam(self, input_tensor, target_class=None):
+        """Generate GradCAM for given input and target class"""
+        self.model.eval()
+
+        # Forward pass
+        input_tensor.requires_grad_(True)
+        output = self.model(input_tensor)
+
+        if target_class is None:
+            target_class = output.argmax(dim=1)
+
+        # Zero gradients
+        self.model.zero_grad()
+
+        # Backward pass
+        if output.dim() > 1:
+            class_score = output[0, target_class]
+        else:
+            class_score = output[target_class]
+
+        class_score.backward()
+
+        # Generate CAM
+        if self.gradients is not None and self.activations is not None:
+            # Global average pooling of gradients
+            weights = torch.mean(self.gradients, dim=[2, 3], keepdim=True)
+
+            # relu weights
+            weights = F.relu(weights)
+
+            # Weighted combination of activation maps
+            cam = torch.sum(weights * self.activations, dim=1, keepdim=True)
+
+            # Apply ReLU
+            cam = F.relu(cam)
+
+            # Normalize to [0, 1]
+            cam = cam.squeeze()
+            if cam.numel() > 1:
+                cam_min = cam.min()
+                cam_max = cam.max()
+                if cam_max > cam_min:
+                    cam = (cam - cam_min) / (cam_max - cam_min)
+
+            return cam.cpu().numpy()
+
+        return None
+
+    def cleanup(self):
+        """Remove hooks"""
+        for hook in self.hooks:
+            hook.remove()
+        self.hooks = []
+
+
 def find_target_layer(model):
     """
     Find suitable target layer for GradCAM using comprehensive heuristics.
-    Adapted from gradcam.py with enhanced detection.
     """
     print(f"🔍 Diagnosing model structure for GradCAM target layer selection...")
 
@@ -126,7 +201,8 @@ def find_target_layer(model):
         target_layer = model.conv_head
         print(f"🎯 Selected 'conv_head': {type(target_layer).__name__}")
 
-    # 5. Fallback: Find last Conv2d layer    if target_layer is None:
+    # 5. Fallback: Find last Conv2d layer
+    if target_layer is None:
         print("   Searching for last Conv2d layer...")
         for name, module in model.named_modules():
             if isinstance(module, torch.nn.Conv2d):
@@ -171,24 +247,24 @@ def find_target_layer(model):
     return target_layer
 
 
-def setup_pytorch_gradcam(model, target_layer=None):
-    """Setup pytorch-grad-cam GradCAM"""
+def setup_manual_gradcam(model, target_layer=None):
+    """Setup manual GradCAM"""
     model.eval()  # Critical: ensure eval mode
 
     if target_layer is None:
         target_layer = find_target_layer(model)
 
     print(
-        f"✅ Setting up pytorch-grad-cam GradCAM on: {target_layer.__class__.__name__}")
+        f"✅ Setting up manual GradCAM on: {target_layer.__class__.__name__}")
 
-    # Create GradCAM object with target layer
-    cam = GradCAMPlusPlus(model=model, target_layers=[target_layer])
+    # Create manual GradCAM object
+    cam = ManualGradCAM(model=model, target_layer=target_layer)
 
     return cam
 
 
-def compute_gradcam_pytorch(cam, input_tensor, target_class=None):
-    """Compute GradCAM using pytorch-grad-cam library"""
+def compute_gradcam_manual(cam, input_tensor, target_class=None):
+    """Compute GradCAM using manual implementation"""
     try:
         if input_tensor.dim() == 3:
             input_tensor = input_tensor.unsqueeze(0)
@@ -196,20 +272,14 @@ def compute_gradcam_pytorch(cam, input_tensor, target_class=None):
         print(
             f"         🔍 Input shape: {input_tensor.shape}, Target class: {target_class}")
 
-        # Create target for specific class
-        targets = None
-        if target_class is not None:
-            targets = [ClassifierOutputTarget(target_class)]
-
         # Generate GradCAM
-        grayscale_cam = cam(input_tensor=input_tensor, targets=targets)
+        grayscale_cam = cam.generate_cam(
+            input_tensor=input_tensor, target_class=target_class)
 
-        # Extract first (and only) result from batch
-        grayscale_cam = grayscale_cam[0, :]
-
-        print(
-            f"         📊 GradCAM range: [{grayscale_cam.min():.6f}, {grayscale_cam.max():.6f}]")
-        print(f"         📐 GradCAM shape: {grayscale_cam.shape}")
+        if grayscale_cam is not None:
+            print(
+                f"         📊 GradCAM range: [{grayscale_cam.min():.6f}, {grayscale_cam.max():.6f}]")
+            print(f"         📐 GradCAM shape: {grayscale_cam.shape}")
 
         return grayscale_cam
 
@@ -219,7 +289,26 @@ def compute_gradcam_pytorch(cam, input_tensor, target_class=None):
         return None
 
 
-# No longer needed - pytorch-grad-cam handles cleanup automatically
+def show_cam_on_image(img, mask, use_rgb=False, colormap=cv2.COLORMAP_JET):
+    """Overlay CAM on image"""
+    # Resize mask to match image size
+    heatmap = cv2.applyColorMap(np.uint8(255 * mask), colormap)
+    if use_rgb:
+        heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    heatmap = np.float32(heatmap) / 255
+
+    if np.max(img) > 1:
+        raise Exception(
+            "The input image should np.float32 in the range [0, 1]")
+
+    # Resize heatmap to match image dimensions
+    if len(img.shape) == 3:
+        h, w = img.shape[:2]
+        heatmap = cv2.resize(heatmap, (w, h))
+
+    cam = heatmap + np.float32(img)
+    cam = cam / np.max(cam)
+    return np.uint8(255 * cam)
 
 
 def tensor_to_rgb_image(tensor, model_config=None):
@@ -267,7 +356,7 @@ def tensor_to_rgb_image(tensor, model_config=None):
     return image
 
 
-def show_gradcam_pytorch(rgb_img, cam, title="GradCAM", save_path=None):
+def show_gradcam_manual(rgb_img, cam, title="GradCAM", save_path=None):
     """Show GradCAM visualization with enhanced display and better heatmap processing."""
     try:
         # Ensure RGB image is in proper range [0, 1]
@@ -557,9 +646,9 @@ def create_comprehensive_incorrect_summary(model, dataset, incorrect_samples,
         print("   ⚠️ No incorrect samples to summarize")
         return
 
-    # Setup GradCAM using pytorch-grad-cam
+    # Setup GradCAM using manual implementation
     try:
-        cam = setup_pytorch_gradcam(model)
+        cam = setup_manual_gradcam(model)
     except Exception as e:
         print(f"❌ Failed to setup GradCAM for summary: {e}")
         return
@@ -621,7 +710,7 @@ def create_comprehensive_incorrect_summary(model, dataset, incorrect_samples,
 
                     # Prepare input and compute GradCAM
                     input_tensor = image.unsqueeze(0).to(device)
-                    grayscale_cam = compute_gradcam_pytorch(
+                    grayscale_cam = compute_gradcam_manual(
                         cam, input_tensor, target_class=pred_class)
 
                     # Convert image to RGB
@@ -738,12 +827,17 @@ def create_comprehensive_incorrect_summary(model, dataset, incorrect_samples,
         print(f"❌ Error creating comprehensive summary: {e}")
         traceback.print_exc()
 
-    # Note: pytorch-grad-cam handles cleanup automatically
+    finally:
+        # Manual cleanup
+        try:
+            cam.cleanup()
+        except:
+            pass
 
 
 def generate_gradcam_analysis_incorrect_only(model, dataset, incorrect_samples,
                                              class_names, model_config, device, save_dir):
-    """Generate GradCAM visualizations ONLY for incorrect predictions using pytorch-grad-cam."""
+    """Generate GradCAM visualizations ONLY for incorrect predictions using manual implementation."""
     print(f"\n🔥 Generating GradCAM analysis for INCORRECT predictions only...")
     print(f"   Will generate {len(incorrect_samples)} visualizations")
 
@@ -756,13 +850,13 @@ def generate_gradcam_analysis_incorrect_only(model, dataset, incorrect_samples,
                                            class_names, model_config, device, save_dir)
 
     # Then generate individual visualizations
-    # Setup GradCAM using pytorch-grad-cam
+    # Setup GradCAM using manual implementation
     try:
-        print(f"   🏗️ Setting up pytorch-grad-cam for individual samples...")
-        cam = setup_pytorch_gradcam(model)
-        print(f"   ✅ pytorch-grad-cam setup successful")
+        print(f"   🏗️ Setting up manual GradCAM for individual samples...")
+        cam = setup_manual_gradcam(model)
+        print(f"   ✅ Manual GradCAM setup successful")
     except Exception as e:
-        print(f"❌ Failed to setup pytorch-grad-cam: {e}")
+        print(f"❌ Failed to setup manual GradCAM: {e}")
         traceback.print_exc()
         return
 
@@ -804,8 +898,8 @@ def generate_gradcam_analysis_incorrect_only(model, dataset, incorrect_samples,
                     # Prepare input
                     input_tensor = image.unsqueeze(0).to(device)
 
-                    # Generate GradCAM using pytorch-grad-cam
-                    grayscale_cam = compute_gradcam_pytorch(
+                    # Generate GradCAM using manual implementation
+                    grayscale_cam = compute_gradcam_manual(
                         cam, input_tensor, target_class=pred_class)
 
                     if grayscale_cam is not None:
@@ -823,7 +917,7 @@ def generate_gradcam_analysis_incorrect_only(model, dataset, incorrect_samples,
                             f"wrong_{true_class_idx:02d}_{mistake_num+1:02d}_{clean_true_name}_as_{clean_pred_name}_conf{confidence:.3f}.png"
                         )
 
-                        show_gradcam_pytorch(
+                        show_gradcam_manual(
                             rgb_img,
                             grayscale_cam,
                             title=f"❌ Wrong: {true_class_name} predicted as {pred_name} (conf: {confidence:.3f})",
@@ -847,11 +941,17 @@ def generate_gradcam_analysis_incorrect_only(model, dataset, incorrect_samples,
         print(f"❌ Error in generate_gradcam_analysis_incorrect_only: {e}")
         traceback.print_exc()
 
+    finally:
+        # Manual cleanup
+        try:
+            cam.cleanup()
+        except:
+            pass
+
     print(
         f"   📊 Generated {incorrect_count}/{total_attempts} individual GradCAM visualizations successfully")
-    print(f"   ✅ pytorch-grad-cam analysis complete!")
+    print(f"   ✅ Manual GradCAM analysis complete!")
     print(f"      Individual predictions saved in: {incorrect_dir}")
-    # Note: pytorch-grad-cam handles cleanup automatically
 
 
 def create_summary_report_incorrect_only(incorrect_samples, class_names, save_dir):
@@ -943,9 +1043,9 @@ def generate_gradcam_disagreement(
         f"\n🔥 Generating GradCAM for disagreement samples ({model1_name} correct, {model2_name} wrong)...")
     os.makedirs(save_dir, exist_ok=True)
 
-    # Setup GradCAM for both models using pytorch-grad-cam
-    cam1 = setup_pytorch_gradcam(model1)
-    cam2 = setup_pytorch_gradcam(model2)
+    # Setup GradCAM for both models using manual implementation
+    cam1 = setup_manual_gradcam(model1)
+    cam2 = setup_manual_gradcam(model2)
 
     try:
         for i, (idx, label, pred1, conf1, pred2, conf2) in enumerate(disagreement_samples):
@@ -953,9 +1053,9 @@ def generate_gradcam_disagreement(
             input_tensor = image.unsqueeze(0).to(device)
 
             # Generate GradCAM for both models
-            gradcam1 = compute_gradcam_pytorch(
+            gradcam1 = compute_gradcam_manual(
                 cam1, input_tensor, target_class=pred1)
-            gradcam2 = compute_gradcam_pytorch(
+            gradcam2 = compute_gradcam_manual(
                 cam2, input_tensor, target_class=pred2)
 
             rgb_img = tensor_to_rgb_image(image, model_config1)
@@ -1011,7 +1111,13 @@ def generate_gradcam_disagreement(
         print(f"❌ Error generating disagreement GradCAM: {e}")
         traceback.print_exc()
 
-    # Note: pytorch-grad-cam handles cleanup automatically
+    finally:
+        # Manual cleanup
+        try:
+            cam1.cleanup()
+            cam2.cleanup()
+        except:
+            pass
 
 
 def print_model_architecture_summary(model, model_name, input_size, num_classes):
