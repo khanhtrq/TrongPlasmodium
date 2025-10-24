@@ -1,13 +1,13 @@
 # --- Dataset Configuration ---
-data_dir: '/kaggle/input/bbbc041/dataset_resplit' # Base dir for relative paths if needed
+data_dir: '/kaggle/input/malaria-parasite/final_malaria_full_class_classification_cropped' # Base dir for relative paths if needed
 
 # --- Datasets Configuration (List) ---
 datasets:
-  # - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
-  #   annotation_train: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/train_annotation_6classes.txt'
-  #   annotation_val: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/val_annotation_6classes.txt' # Use original val
-  #   annotation_test: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification/test_annotation_6classes.txt' # Use original test
-  #   annotation_root: '/kaggle/input/malaria-full-class/v2_malaria_full_class_classification'
+  - type: 'annotation' # Optional: Second dataset definition (e.g., original training data)
+    annotation_train: '/kaggle/input/malaria-parasite/final_malaria_full_class_classification_cropped/5 classes - May 2025/train_annotation_5classes.txt'
+    annotation_val: '/kaggle/input/malaria-parasite/final_malaria_full_class_classification_cropped/5 classes - May 2025/val_annotation_5classes.txt' # Use original val
+    annotation_test: '/kaggle/input/malaria-parasite/final_malaria_full_class_classification_cropped/5 classes - May 2025/test_annotation_5classes.txt' # Use original test
+    annotation_root: '//kaggle/input/malaria-parasite/final_malaria_full_class_classification_cropped/5 classes - May 2025/'
 
   # - type: 'annotation' # First dataset definition (e.g., SMOTE for training)
   #   # Settings for 'annotation' type
@@ -21,7 +21,7 @@ datasets:
 
 
   - type: 'imagefolder' # Optional: Example ImageFolder definition
-    imagefolder_root: '/kaggle/input/bbbc041/dataset_resplit'
+    imagefolder_root: '/kaggle/input/malaria-parasite/final_malaria_full_class_classification_cropped'
     imagefolder_train_subdir: 'train'
     imagefolder_val_subdir: 'val'
     imagefolder_test_subdir: 'test'
