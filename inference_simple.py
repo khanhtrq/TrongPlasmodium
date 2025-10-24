@@ -1298,7 +1298,7 @@ def main():
     print("🎯 PlasmodiumClassification Simple Inference")
     print("=" * 50)
     model_checkpoint = "/kaggle/working/TrongPlasmodium/model/final_plasmodium.pth"
-    model_name = 'mobilenetv4_hybrid_medium.ix_e550_r384_in1k'
+    model_name = 'efficientnet_b1.ra4_e3600_r240_in1k'
     model_num_classes = 6
     
     # Example usage - specify direct model name, checkpoint path, and class count
