@@ -247,7 +247,7 @@ classifier_only_training:
       apply_frequency: 1          # Apply every N epochs (1 = every epoch)
 
 # --- Results Directory ---
-results_dir: 'results_kaggle' # Separate results dir for Kaggle runs
+results_dir: '/kaggle/working/TrongPlasmodium/model' # Separate results dir for Kaggle runs
 
 # --- Device Configuration ---
 device:
