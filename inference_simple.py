@@ -1227,6 +1227,10 @@ def run_simple_inference(
             scores_output_path=scores_output_path
         )
         
+        print(len(results['predictions']))
+        print(len(results['true_labels']))
+        print(len(results['confidences']))
+        
         # Generate evaluation report
         if output_dir is None:
             checkpoint_dir = Path(selected_checkpoint).parent
@@ -1297,7 +1301,7 @@ def main():
     """Main function for standalone script execution."""
     print("🎯 PlasmodiumClassification Simple Inference")
     print("=" * 50)
-    model_checkpoint = "/kaggle/working/TrongPlasmodium/model/final_bbbc041.pth"
+    model_checkpoint = "/kaggle/working/TrongPlasmodium/model/final_plasmodium.pth"
     model_name = 'efficientnet_b1.ra4_e3600_r240_in1k'
     model_num_classes = 6
     
