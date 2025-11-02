@@ -179,6 +179,7 @@ for rbc_folder in os.listdir(os.path.join(detection_save_dir, 'crop')):
         # --------------
         cls_class_name = classification_results['inference_results']['predictions'][i]
         conf_score = classification_results['inference_results']['confidences'][i]
+        input_images = classification_results['inference_results']['sample_paths'][i]
         # --------------
 
         if args.merge_healthy_other:
