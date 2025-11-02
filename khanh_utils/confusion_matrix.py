@@ -131,8 +131,6 @@ class DetectionConfusionMatrix:
             support.append(sum(confusion_matrix[i, :]))
 
         
-        print([support[i]*precision[i] for i in range(4)])
-        print([support[i]*recall[i] for i in range(4)])
         weighted_precision = sum([support[i]*precision[i] for i in range(4)]) / sum(support[:4])
         weighted_recall = sum([support[i]*recall[i] for i in range(4)]) / sum(support[:4])
 
