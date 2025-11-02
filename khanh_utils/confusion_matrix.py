@@ -89,7 +89,7 @@ class DetectionConfusionMatrix:
                 self.matrix[gt_class, detection_class] += 1
 
                 # Save image path: 
-                self.image_path[gt_class][detection_class].append(input_images[i])
+                # self.image_path[gt_class][detection_class].append(input_images[i])
             else:
                 self.matrix[gt_class, self.num_classes] += 1
 
