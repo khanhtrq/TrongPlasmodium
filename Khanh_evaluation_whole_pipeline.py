@@ -9,7 +9,7 @@ import torch
 from pathlib import Path
 from khanh_utils.confusion_matrix import DetectionConfusionMatrix
 
-from TrongPlasmodium.Khanh_inference_simple_draft import run_simple_inference
+from Khanh_inference_simple_draft import run_simple_inference
 
 
 # Create argument parser
