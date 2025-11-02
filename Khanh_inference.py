@@ -1,4 +1,4 @@
-from inference_simple_draft import run_simple_inference
+from TrongPlasmodium.Khanh_inference_simple_draft import run_simple_inference
 
 def main():
     """Main function for standalone script execution."""
