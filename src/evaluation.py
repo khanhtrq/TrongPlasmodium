@@ -245,7 +245,7 @@ def report_classification(y_true, y_pred, class_names, save_path_base=None):
                 print(f"   💾 Raw confusion matrix saved to: {raw_cm_path}")
             except Exception as e:
                 print(f"   ⚠️ Error saving raw confusion matrix plot: {e}")
-        plt.show() # Show plot after attempting to save
+        # plt.show() # Show plot after attempting to save
 
     except Exception as e:
         print(f"❌ Error plotting raw confusion matrix: {e}")
@@ -273,7 +273,7 @@ def report_classification(y_true, y_pred, class_names, save_path_base=None):
                 print(f"   💾 Normalized (True) confusion matrix saved to: {norm_true_cm_path}")
             except Exception as e:
                 print(f"   ⚠️ Error saving normalized (True) confusion matrix plot: {e}")
-        plt.show() # Show plot after attempting to save
+        # plt.show() # Show plot after attempting to save
 
     except Exception as e:
         print(f"❌ Error plotting normalized (True) confusion matrix: {e}")
@@ -298,7 +298,7 @@ def report_classification(y_true, y_pred, class_names, save_path_base=None):
                 print(f"   💾 Normalized (Pred) confusion matrix saved to: {norm_pred_cm_path}")
             except Exception as e:
                 print(f"   ⚠️ Error saving normalized (Pred) confusion matrix plot: {e}")
-        plt.show()
+        # plt.show()
 
     except Exception as e:
         print(f"❌ Error plotting normalized (Pred) confusion matrix: {e}")
