@@ -1301,9 +1301,10 @@ def main():
     """Main function for standalone script execution."""
     print("🎯 PlasmodiumClassification Simple Inference")
     print("=" * 50)
-    model_checkpoint = "/kaggle/working/TrongPlasmodium/model/final_bbbc041.pth"
+    model_checkpoint = "./model/final_plasmodium.pth"
     model_name = 'efficientnet_b1.ra4_e3600_r240_in1k'
-    model_num_classes = 6
+    model_num_classes = 5
+    config_path='config_kaggle.yaml'
     
     # Example usage - specify direct model name, checkpoint path, and class count
     results = run_simple_inference(
@@ -1312,6 +1313,7 @@ def main():
         model_num_classes=model_num_classes,  # Explicitly specify model class count
         split='test',
         batch_size=16,
+        config_path= config_path, 
         save_scores=True,  # 💾 Enable softmax score saving
         scores_filename="test_scores_6cls_vs_7cls.txt",  # Custom filename
         run_phase2=True,  # 🔬 Enable Phase 2 evaluation
