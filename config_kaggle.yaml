@@ -80,12 +80,12 @@ class_remapping:
     # - "rbc_parasitized_F_S1_or_S2"
     # - "rbc_parasitized_F_G1_or_G2"
     # - "rbc_unparasitized_combined"  # Combined class
-    - 'gametocyte' # 3
-    - 'leukocyte' # 5
-    - 'red blood cell' # 4
     - 'ring' # 0
-    - 'schizont' # 2
     - 'trophozoite' # 1
+    - 'schizont' # 2
+    - 'gametocyte' # 3
+    - 'red blood cell' # 4
+
 
 # --- Model Configuration ---
 model_names:
