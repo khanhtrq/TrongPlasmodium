@@ -6,10 +6,10 @@ import numpy as np
 import json
 import torch
 # from mmpretrain.apis import ImageClassificationInferencer
-from pathlib import Path
+# from pathlib import Path
 from khanh_utils.confusion_matrix import DetectionConfusionMatrix
 
-from Khanh_inference_simple_draft import run_simple_inference
+from Khanh_inference_simple import run_simple_inference
 
 
 # Create argument parser
@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser(description="Parser for classification")
 
 # Add arguments
 parser.add_argument("--detection_model", type=str, help="detection model",
-                    default="..\yolo11n_reco.pt")
+                    default=".\detect_results\yolo11m_reco.pt")
 parser.add_argument("--blood_smear_images", type=str, 
                     default="draft_blood_smear",
                     help="path to folder with blood smear images")
