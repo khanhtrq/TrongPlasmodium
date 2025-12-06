@@ -4,6 +4,7 @@ import os
 import cv2
 import numpy as np
 import json
+import tqdm
 import torch
 # from mmpretrain.apis import ImageClassificationInferencer
 # from pathlib import Path
@@ -113,7 +114,7 @@ txt_result_dir = os.path.join(detection_save_dir, "labels")
 detection_conf_obj = DetectionConfusionMatrix(num_classes=args.num_classes, CONF_THRESHOLD=args.conf_threshold,
                                               IOU_THRESHOLD=args.iou_threshold)
 
-for rbc_folder in os.listdir(os.path.join(detection_save_dir, 'crop')):
+for rbc_folder in tqdm(os.listdir(os.path.join(detection_save_dir, 'crop'))):
     #get the coordication of image
     # cell_img_name = [f for f in os.listdir(args.blood_smear_images) if f.startswith(rbc_folder)][0]
     # img_path = os.path.join(args.blood_smear_images, cell_img_name)
