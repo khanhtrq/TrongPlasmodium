@@ -4,7 +4,7 @@ import os
 import cv2
 import numpy as np
 import json
-import tqdm
+from tqdm import tqdm
 import torch
 # from mmpretrain.apis import ImageClassificationInferencer
 # from pathlib import Path
