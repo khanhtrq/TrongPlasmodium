@@ -52,7 +52,7 @@ args = parser.parse_args()
 detection_model = YOLO(args.detection_model)
 
 detection_results = detection_model.predict(source=args.blood_smear_images, save= True, 
-                                            save_txt= True, save_conf= True)
+                                            save_txt= True, save_conf= True, conf = args.conf_threshold)
 
 save_dir = detection_results[0].save_dir
 txt_result_dir = os.path.join(save_dir, "labels")
