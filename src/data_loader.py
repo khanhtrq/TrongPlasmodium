@@ -28,9 +28,6 @@ class AnnotationDataset(Dataset):
         self.targets = []  # Final (potentially remapped) label indices
         self.class_remapping = class_remapping
 
-        print(f"🔍 Loading annotations from: {annotation_file}")
-        print(f"   Image root directory: {root_dir}")
-
         try:
             with open(annotation_file, 'r') as f:
                 lines = f.readlines()
@@ -74,9 +71,6 @@ class AnnotationDataset(Dataset):
             raise ValueError(
                 f"❌ No valid samples loaded from {annotation_file}. Check file format and paths.")
 
-        print(f"   Found {len(self.samples)} samples.")
-        print(
-            f"   Original labels found in file: {sorted(list(self.original_labels))}")
 
         # --- Apply Class Remapping (NEW) ---
         if self.class_remapping and self.class_remapping.get('enabled', False):
@@ -89,10 +83,8 @@ class AnnotationDataset(Dataset):
             # Use remapped class names if available, otherwise use provided class_names
             if self.class_remapping and self.class_remapping.get('enabled', False) and self.class_remapping.get('final_class_names'):
                 self.classes = self.class_remapping['final_class_names']
-                print(f"   Using remapped class names: {self.classes}")
             else:
                 self.classes = class_names
-                print(f"   Using provided class names: {self.classes}")
 
             num_expected_classes = len(self.classes)
 
@@ -106,9 +98,6 @@ class AnnotationDataset(Dataset):
 
             # Let's assume the unique sorted labels from the file should map 1:1 to class_names
             if len(unique_original_labels) != num_expected_classes:
-                warnings.warn(
-                    f"⚠️ Mismatch! Found {len(unique_original_labels)} unique labels in file, but {num_expected_classes} class names provided. Label mapping might be incorrect.")
-                # Attempt a direct mapping anyway, hoping the file labels are 0..N-1
                 label_to_final_index = {
                     label: label for label in unique_original_labels}
 
@@ -116,8 +105,6 @@ class AnnotationDataset(Dataset):
                 # Assume the sorted unique labels correspond to the order of class_names
                 label_to_final_index = {
                     orig_label: idx for idx, orig_label in enumerate(unique_original_labels)}
-                print(
-                    f"   Mapping original labels to class_names indices: {label_to_final_index}")
 
             # Apply the mapping
             try:
@@ -139,7 +126,6 @@ class AnnotationDataset(Dataset):
                 if not self.samples:
                     raise ValueError(
                         "❌ No samples remained after label remapping. Check consistency between annotation file labels and provided class_names.")
-                print(f"   {len(self.samples)} samples remain after remapping.")
 
             except KeyError as e:
                 raise ValueError(
@@ -148,13 +134,10 @@ class AnnotationDataset(Dataset):
         else:
             # Infer class names from sorted unique labels
             self.classes = [str(i) for i in unique_original_labels]
-            print(f"   Inferring class names from labels: {self.classes}")
             num_expected_classes = len(self.classes)
             # Create a mapping from original label to a 0-based contiguous index
             label_to_final_index = {orig_label: idx for idx,
                                     orig_label in enumerate(unique_original_labels)}
-            print(
-                f"   Mapping original labels to 0-based indices: {label_to_final_index}")
             # Apply mapping
             self.samples = [(img_path, label_to_final_index[label])
                             for img_path, label in self.samples]
@@ -164,8 +147,7 @@ class AnnotationDataset(Dataset):
         # Final check on target range
         if self.targets:
             min_target, max_target = min(self.targets), max(self.targets)
-            print(
-                f"   Final target labels range: [{min_target}, {max_target}] for {len(self.classes)} classes.")
+
             if max_target >= len(self.classes):
                 warnings.warn(
                     f"⚠️ Maximum target label {max_target} is out of bounds for {len(self.classes)} classes!")
@@ -179,10 +161,8 @@ class AnnotationDataset(Dataset):
         """Apply class remapping to samples and update original_labels."""
         mapping = self.class_remapping.get('mapping', {})
         if not mapping:
-            print("   No class mapping provided, skipping remapping.")
             return
 
-        print(f"   Applying class remapping: {mapping}")
 
         # Apply remapping to samples
         remapped_samples = []
@@ -196,8 +176,6 @@ class AnnotationDataset(Dataset):
             # Check if label should be excluded from training (-1)
             if new_label == -1:
                 excluded_samples.append((img_path, label))
-                print(
-                    f"   📋 Excluding sample: {img_path} (original label: {label})")
                 continue
 
             remapped_samples.append((img_path, new_label))
@@ -205,15 +183,6 @@ class AnnotationDataset(Dataset):
 
         self.samples = remapped_samples
         self.original_labels = new_original_labels
-
-        print(
-            f"   After remapping - labels found: {sorted(list(self.original_labels))}")
-        print(
-            f"   Remapped {len(self.samples)} samples, excluded {len(excluded_samples)} samples.")
-
-        if excluded_samples:
-            print(
-                f"   🚫 Excluded classes (mapped to -1): {sorted(set(orig_label for _, orig_label in excluded_samples))}")
 
     def __len__(self):
         return len(self.samples)
@@ -253,7 +222,6 @@ class ImageFolderWrapper(datasets.ImageFolder):
     """
 
     def __init__(self, root, transform=None, target_transform=None, loader=datasets.folder.default_loader, is_valid_file=None, class_remapping=None):
-        print(f"🔍 Loading ImageFolder from: {root}")
         super().__init__(root, transform=transform, target_transform=target_transform,
                          loader=loader, is_valid_file=is_valid_file)
 
@@ -270,20 +238,14 @@ class ImageFolderWrapper(datasets.ImageFolder):
             warnings.warn(
                 f"⚠️ No image files found in {root}. Check the directory structure and image extensions.")
         else:
-            print(
-                f"   Found {len(self.samples)} samples in {len(self.classes)} classes.")
-            print(f"   Classes found: {self.classes}")
             min_target, max_target = min(self.targets), max(self.targets)
-            print(f"   Target labels range: [{min_target}, {max_target}]")
 
     def _apply_class_remapping(self):
         """Apply class remapping to ImageFolder samples and targets."""
         mapping = self.class_remapping.get('mapping', {})
         if not mapping:
-            print("   No class mapping provided for ImageFolder, skipping remapping.")
             return
 
-        print(f"   Applying class remapping to ImageFolder: {mapping}")
 
         # Apply remapping to samples and targets
         remapped_samples = []
@@ -297,8 +259,6 @@ class ImageFolderWrapper(datasets.ImageFolder):
             # Check if should be excluded from training (-1)
             if new_label == -1 or new_target == -1:
                 excluded_samples.append((img_path, label))
-                print(
-                    f"   📋 Excluding sample: {img_path} (original label: {label})")
                 continue
 
             remapped_samples.append((img_path, new_label))
@@ -307,13 +267,10 @@ class ImageFolderWrapper(datasets.ImageFolder):
         self.samples = remapped_samples
         self.targets = remapped_targets
 
-        print(
-            f"   Remapped {len(self.samples)} samples, excluded {len(excluded_samples)} samples.")
 
         if excluded_samples:
             excluded_classes = sorted(
                 set(orig_label for _, orig_label in excluded_samples))
-            print(f"   🚫 Excluded classes (mapped to -1): {excluded_classes}")
 
         # Update class names if provided
         if self.class_remapping.get('final_class_names'):
@@ -321,13 +278,7 @@ class ImageFolderWrapper(datasets.ImageFolder):
             unique_labels = sorted(set(self.targets))
             if len(unique_labels) == len(self.class_remapping['final_class_names']):
                 self.classes = self.class_remapping['final_class_names']
-                print(f"   Updated class names to: {self.classes}")
-            else:
-                warnings.warn(
-                    f"⚠️ Mismatch between unique remapped labels ({len(unique_labels)}) and final_class_names ({len(self.class_remapping['final_class_names'])})")
 
-        print(
-            f"   After remapping - unique targets: {sorted(set(self.targets))}")
 
 # --- New Combined Dataset Wrapper ---
 
@@ -352,8 +303,6 @@ class CombinedDataset(Dataset):
             raise AttributeError(
                 "The first dataset in the list must have a 'classes' attribute.")
         self.classes = first_dataset.classes
-        print(
-            f"   CombinedDataset using classes from first dataset: {self.classes}")
 
         all_targets = []
         for i, ds in enumerate(datasets):
@@ -371,8 +320,7 @@ class CombinedDataset(Dataset):
                 break
         else:  # Only runs if the loop completes without break
             self.targets = all_targets
-            print(
-                f"   CombinedDataset combined targets count: {len(self.targets)}")
+
 
         # --- Add other compatibility attributes (optional, may need refinement) ---
         # Use attributes from the first dataset as representative
@@ -428,7 +376,6 @@ def compute_class_weights_from_dataset(dataset, num_classes, weight_calculation=
     import numpy as np
     from collections import Counter
 
-    print(f"📊 Computing class weights for WeightedRandomSampler...")
 
     # Get targets from dataset
     if hasattr(dataset, 'targets'):
@@ -444,20 +391,16 @@ def compute_class_weights_from_dataset(dataset, num_classes, weight_calculation=
     # Filter out any -1 labels that might have slipped through
     valid_targets = targets[targets != -1]
     if len(valid_targets) != len(targets):
-        print(
-            f"   🚫 Filtered out {len(targets) - len(valid_targets)} samples with -1 labels")
         targets = valid_targets
 
     # Count class frequencies
     class_counts = Counter(targets)
-    print(f"   Class distribution: {dict(class_counts)}")
 
     # Ensure all classes are represented (fill missing classes with 1)
     for class_idx in range(num_classes):
         if class_idx not in class_counts:
             class_counts[class_idx] = 1
-            print(
-                f"   ⚠️ Class {class_idx} not found in dataset, setting count to 1")
+
 
     # Calculate weights based on method
     if weight_calculation == 'inverse':
@@ -482,14 +425,9 @@ def compute_class_weights_from_dataset(dataset, num_classes, weight_calculation=
     # Apply square root for softer balancing if requested
     if apply_sqrt:
         class_weights = torch.sqrt(class_weights)
-        print(f"   ✅ Applied square root to weights for softer balancing")
 
     # Clamp weights to prevent extreme values
     class_weights = torch.clamp(class_weights, min=min_weight, max=max_weight)
-
-    print(f"   📊 Computed class weights: {class_weights.tolist()}")
-    print(
-        f"   📈 Weight ratio (max/min): {class_weights.max().item()/class_weights.min().item():.2f}")
 
     return class_weights
 
@@ -511,8 +449,6 @@ def create_weighted_random_sampler(dataset, num_classes, sampler_config):
     if not sampler_config.get('enabled', False):
         return None
 
-    print(f"🎲 Creating WeightedRandomSampler...")
-    print(f"   Configuration: {sampler_config}")
 
     # Compute class weights
     class_weights = compute_class_weights_from_dataset(
@@ -538,8 +474,6 @@ def create_weighted_random_sampler(dataset, num_classes, sampler_config):
     # Filter out samples with -1 labels (should already be filtered, but double-check)
     valid_indices = [i for i, target in enumerate(targets) if target != -1]
     if len(valid_indices) != len(targets):
-        print(
-            f"   🚫 Found {len(targets) - len(valid_indices)} samples with -1 labels, filtering them out")
         targets = targets[valid_indices]
 
     # Create sample weights (weight for each sample based on its class)
@@ -548,8 +482,6 @@ def create_weighted_random_sampler(dataset, num_classes, sampler_config):
         if target >= 0 and target < len(class_weights):  # Safety check
             sample_weights[idx] = class_weights[target]
         else:
-            print(
-                f"   ⚠️ Invalid target {target} at index {idx}, setting weight to 0")
             sample_weights[idx] = 0.0
 
     # Create the sampler
@@ -558,12 +490,6 @@ def create_weighted_random_sampler(dataset, num_classes, sampler_config):
         num_samples=len(targets),  # Use filtered length
         replacement=sampler_config.get('replacement', True)
     )
-
-    print(
-        f"   ✅ WeightedRandomSampler created with {len(sample_weights)} samples")
-    print(
-        f"   📊 Sample weights range: [{sample_weights.min().item():.4f}, {sample_weights.max().item():.4f}]")
-
     return sampler
 
 

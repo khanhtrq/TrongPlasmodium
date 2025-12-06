@@ -48,18 +48,15 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
     # --- Crucial Check: Ensure num_classes is valid ---
     if num_classes is None or not isinstance(num_classes, int) or num_classes < 1:
         raise ValueError(f"❌ num_classes must be a positive integer, but got {num_classes}")
-    print(f"Initializing model '{model_name}' for {num_classes} classes...")
 
     # --- Try loading with timm first ---
     try:
-        print(f"⏳ Attempting to load model '{model_name}' using timm...")
         model_ft = timm.create_model(
             model_name,
             pretrained=use_pretrained,
             num_classes=num_classes,
             drop_rate=drop_rate,
         )
-        print(f"✅ Successfully loaded '{model_name}' with timm.")
 
         # Apply feature extraction freezing if requested
         set_parameter_requires_grad(model_ft, feature_extract)
@@ -76,13 +73,8 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
             'std': data_config.get('std', (0.229, 0.224, 0.225)),
             'crop_pct': data_config.get('crop_pct', 0.875) # Important for validation resizing
         }
-        print(f"🔍 Model transfrom: {transform}")
-        print(f"⚙️ timm model config: {model_config}")
-        print(f"🖼️ Recommended input size: {input_size}x{input_size}")
-        print(f"🔄 Using timm's recommended transform pipeline.")
 
     except Exception as e:
-        print(f"⚠️ Failed to load '{model_name}' with timm: {e}. Falling back to torchvision or custom definitions...")
 
         # --- Fallback to torchvision models ---
         if model_name == "resnet":
@@ -141,14 +133,8 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
             model_ft = None # Model not found in timm or defined fallbacks
 
         if model_ft is None:
-            print(f"❌ Error: Model '{model_name}' could not be initialized.")
-            print("   Please check the model name and ensure 'timm' is installed (`pip install timm`).")
-            print("   Available timm models can be listed with `timm.list_models('*keyword*')`.")
             exit() # Exit if model loading fails completely
         else:
-            print(f"✅ Successfully loaded '{model_name}' using fallback definition.")
-            print(f"🖼️ Using default input size: {input_size}x{input_size}")
-            print(f"🔄 Using default transform pipeline (defined in main script).")
             # Populate model_config with defaults if not using timm
             model_config = {
                 'input_size': input_size,
@@ -157,12 +143,6 @@ def initialize_model(model_name, num_classes, feature_extract=False, use_pretrai
                 'std': (0.229, 0.224, 0.225),
                 'crop_pct': 0.875 # Common default
             }
-    try:
-        print("number of parameters in model: ", sum(p.numel() for p in model_ft.parameters() if p.requires_grad))
-        print(" Flops: ", torch.cuda.FloatTensor(1, 3, input_size, input_size).numel() * 2 / 1e9) # Rough estimate of FLOPs
-        print(" Model size: ", sum(p.numel() for p in model_ft.parameters()) / 1e6, "M")
-    except Exception as e:
-        print(f"⚠️ Error calculating model size or FLOPs: {e}")
     
     return model_ft, input_size, transform, model_config
 

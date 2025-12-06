@@ -139,7 +139,7 @@ for rbc_folder in os.listdir(os.path.join(detection_save_dir, 'crop')):
         model_num_classes=model_num_classes,  # Explicitly specify model class count
         split='test',
         batch_size=16,
-        config_path = 'config_draft.yaml',
+        config_path = 'config_prototype.yaml',
         save_scores=True,  # 💾 Enable softmax score saving
         scores_filename="test_scores_6cls_vs_7cls.txt",  # Custom filename
         run_phase2=True,  # 🔬 Enable Phase 2 evaluation

@@ -496,13 +496,7 @@ class SimpleInference:
         }
 
         """
-        if self.verbose:
-            print(f"\n🔮 Running inference...")
-            if hasattr(self, 'class_mismatch') and self.class_mismatch:
-                print(f"   ⚠️ Model can only predict {self.model_num_classes} classes out of {self.num_classes}")
-                print(f"   📝 Samples with labels >= {self.model_num_classes} will be treated as misclassified")
-            if save_scores:
-                print(f"   💾 Will save softmax scores to file")
+
         
         # Create dataloader with Windows-compatible settings
         dataloader = DataLoader(
@@ -814,12 +808,12 @@ class SimpleInference:
             print(f"   🎯 Generating detailed classification report and confusion matrices...")
         
         # Call the comprehensive evaluation function
-        report_classification(
-            y_true=y_true.tolist(),
-            y_pred=y_pred.tolist(), 
-            class_names=self.class_names,
-            save_path_base=save_path_base
-        )
+        # report_classification(
+        #     y_true=y_true.tolist(),
+        #     y_pred=y_pred.tolist(), 
+        #     class_names=self.class_names,
+        #     save_path_base=save_path_base
+        # )
         
         # 2. Save our custom summary with class mismatch info
         self._save_text_summary(report, save_dir / "inference_summary.txt")
@@ -1104,12 +1098,12 @@ class SimpleInference:
         if self.verbose:
             print(f"      🎯 Generating Phase 2 classification report and confusion matrices...")
         
-        report_classification(
-            y_true=y_true,
-            y_pred=y_pred_phase2,
-            class_names=self.class_names,
-            save_path_base=phase2_base_path
-        )
+        # report_classification(
+        #     y_true=y_true,
+        #     y_pred=y_pred_phase2,
+        #     class_names=self.class_names,
+        #     save_path_base=phase2_base_path
+        # )
         
         # 2. Save Phase 2 summary
         self._save_phase2_text_summary(phase2_report, phase2_dir / "phase2_summary.txt")
@@ -1206,7 +1200,7 @@ def run_simple_inference(
     save_scores=False,
     scores_filename=None,
     run_phase2=False,
-    verbose=True,
+    verbose=False,
     imgf_root = '.\draftdata'
 ):
     """
