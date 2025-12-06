@@ -191,7 +191,7 @@ for rbc_folder in tqdm(os.listdir(os.path.join(detection_save_dir, 'crop'))):
         cls_detection_result_list.append('{} {} {} {} {} {}\n'.format(cls_class_name, det_conf_score, x1, y1, x2, y2))
 
         #predictions results to compute confusion matrix
-        pred_conf.append([x1, y1, x2, y2, det_conf_score, cls_class_name])
+        pred_conf.append([x1, y1, x2, y2, conf_score, cls_class_name])
     pred_conf = np.array(pred_conf, dtype = object)
 
     #Grounth truth, format <label>, <x1>, <y1>, <x2>, <y2>
