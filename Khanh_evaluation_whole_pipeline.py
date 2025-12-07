@@ -88,8 +88,9 @@ for txt_file in txt_file_list:
         # Crop object
         cropped_object = image[y1:y2, x1:x2]
 
-        output_filename = os.path.join(output_folder, "dummy_label", f"{i+1}.jpg")
-        cv2.imwrite(output_filename, cropped_object)
+        if cropped_object.size != 0:
+            output_filename = os.path.join(output_folder, "dummy_label", f"{i+1}.jpg")
+            cv2.imwrite(output_filename, cropped_object)
 
 # ---------------
 # CLASSIFICATION
