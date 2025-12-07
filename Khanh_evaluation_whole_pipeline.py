@@ -74,7 +74,8 @@ for txt_file in txt_file_list:
     cell_detection_result_file = os.path.join(txt_result_dir, txt_file)
     with open(cell_detection_result_file, "r") as file:
         lines = file.readlines()
-    
+    valid_lines = []
+
     for i, line in enumerate(lines):
         parts = line.strip().split()
 
@@ -88,9 +89,15 @@ for txt_file in txt_file_list:
         # Crop object
         cropped_object = image[y1:y2, x1:x2]
 
-        if cropped_object.size != 0:
-            output_filename = os.path.join(output_folder, "dummy_label", f"{i+1}.jpg")
-            cv2.imwrite(output_filename, cropped_object)
+        if cropped_object.size == 0:
+            continue
+        
+        output_filename = os.path.join(output_folder, "dummy_label", f"{i+1}.jpg")
+        cv2.imwrite(output_filename, cropped_object)
+        valid_lines.append(line)
+    
+    with open(cell_detection_result_file, "w") as file:
+        file.writelines(valid_lines)
 
 # ---------------
 # CLASSIFICATION
