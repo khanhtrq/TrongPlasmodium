@@ -35,7 +35,7 @@ def inference(args):
     detection_model = YOLO(args.detection_model)
 
     detection_results = detection_model.predict(source=args.image_folder, save= True, 
-                                                save_txt= True, save_conf= True)
+                                                save_txt= True, save_conf= True, conf = args.conf_threshold)
 
     save_dir = detection_results[0].save_dir
     txt_result_dir = os.path.join(save_dir, "labels")
@@ -153,30 +153,31 @@ def inference(args):
             cls_class_id = classification_results['inference_results']['predictions'][i] # classification_results[i].pred_label.item()
             pred_score = classification_results['inference_results']['confidences'][i] # classification_results[i].pred_score
             
-            cls_detection_result_list.append('{} {} {} {} {} {}\n'.format(cls_class_id, conf_score, x1, y1, x2, y2))
+            if pred_score > args.conf_threshold:
+                cls_detection_result_list.append('{} {} {} {} {} {}\n'.format(cls_class_id, conf_score, x1, y1, x2, y2))
 
-            # Drawing bounding box
-            # Should be prediction score (confidence score of the classification)
+                # Drawing bounding box
+                # Should be prediction score (confidence score of the classification)
 
-            hex_color = colors[cls_class_id]
-            hex_color = hex_color.lstrip('#')
-            rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-            bgr = (rgb[2], rgb[1], rgb[0])
-            label_text = f"{class_names[cls_class_id]} {conf_score:.2f}"
+                hex_color = colors[cls_class_id]
+                hex_color = hex_color.lstrip('#')
+                rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                bgr = (rgb[2], rgb[1], rgb[0])
+                label_text = f"{class_names[cls_class_id]} {conf_score:.2f}"
             
-            if cls_class_id == 4:
-                cv2.rectangle(blood_image, (x1, y1), (x2, y2), bgr, 3)
-                thickness = 3
-                cv2.putText(blood_image, label_text, (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), thickness)
-            else:
-                cv2.rectangle(blood_image, (x1, y1), (x2, y2), bgr, 6)
-                thickness = 4
-                cv2.putText(blood_image, label_text, (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), thickness)
+                if cls_class_id == 4:
+                    cv2.rectangle(blood_image, (x1, y1), (x2, y2), bgr, 3)
+                    thickness = 3
+                    cv2.putText(blood_image, label_text, (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), thickness)
+                else:
+                    cv2.rectangle(blood_image, (x1, y1), (x2, y2), bgr, 6)
+                    thickness = 4
+                    cv2.putText(blood_image, label_text, (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), thickness)
 
-            stage_name = class_names[cls_class_id]
-            parasitemia_count[stage_name] += 1
+                stage_name = class_names[cls_class_id]
+                parasitemia_count[stage_name] += 1
 
         # Save the refined result
         with open(cls_detection_result, "w") as refined_file:
@@ -234,7 +235,7 @@ def get_args_gui(root):
             # cls_config=cls_config_entry.get(),
             cls_model=cls_model_entry.get(),
             save_dir=save_dir_entry.get(),
-            conf_threshold= 0.7, # float(conf_threshold_entry.get()),
+            conf_threshold= 0.3, # float(conf_threshold_entry.get()),
             iou_threshold= 0.5, #float(iou_threshold_entry.get()),
             # cls_batch_size=int(cls_batch_size_entry.get()),
             num_classes=5 # int(num_classes_entry.get())
